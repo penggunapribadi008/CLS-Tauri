@@ -1,0 +1,464 @@
+:root{--fs:16px;--fsn:16px;--fst:16px;--bg:.9;--gap:12px;--cbg:transparent;
+--base:14,18,20;--winbg:#0e1214;--card-bg:#151b1f;--sh-card:none;--blur:none;--line:#26323a;--ctl-bg:#0b0f11;--ctl-line:#26323a;--sh-in:none;--sh-btn:none;--rad:14px;--rad-c:10px;
+--text:#e8eef0;--muted:#8ea1ab;--acc:#ff7a3d;--acc-t:#1a0e08;--acc2:#35d0ba;--bad:#ff6b6b;--good:#3ecf8e;--yc:#ff8f8a;--tcl:#6fe3ee;--wc:#b794ff;--kc:#53fc18;--btn2:#232d33}
+*{box-sizing:border-box;scrollbar-width:none;-webkit-user-select:none;user-select:none}
+/* Hanya jendela aplikasi yang menghilangkan garis fokus. Overlay TIDAK boleh: CSS buatan pengguna (mis. jahitan putus-putus lewat outline) harus tampil apa adanya. */
+body:not(.overlay) *{outline:none!important}
+*::-webkit-scrollbar{display:none}
+input,textarea{-webkit-user-select:text;user-select:text}
+html,body{margin:0;height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif;color:var(--text);background:transparent}
+body.dock,body.settings,body.tplwin,body.addwin,body.reportwin{background:var(--winbg)}
+body.overlay{--text:#fff;--yc:#ff8f8a;--tcl:#6fe3ee;--wc:#b794ff;--kc:#53fc18}
+body.locked{background:transparent;--text:#fff;--yc:#ff8f8a;--tcl:#6fe3ee;--wc:#b794ff;--kc:#53fc18;--base:15,15,22}
+body.preview{background:repeating-conic-gradient(#2a2a35 0 25%,#1c1c25 0 50%) 0 0/24px 24px}
+#app{position:absolute;inset:0;display:flex;flex-direction:column;background:rgba(var(--base),var(--bg))}
+/* judul jendela (tanpa bingkai) */
+#tb{display:none;position:fixed;top:0;left:0;right:0;height:34px;z-index:50;align-items:center;justify-content:space-between;padding-left:12px;background:var(--card-bg);border-bottom:1px solid var(--line);backdrop-filter:var(--blur);-webkit-app-region:drag}
+body.settings #tb,body.tplwin #tb,body.addwin #tb,body.reportwin #tb,body.donatewin #tb{display:flex}
+#tb .ttl{display:flex;align-items:center;gap:8px;font:600 12px 'Segoe UI',sans-serif;color:var(--muted)}#tb .ttl img{width:16px;height:16px}
+#tb .wb{width:46px;height:34px;border:0;background:transparent;color:var(--text);cursor:pointer;font-size:14px;-webkit-app-region:no-drag}
+#tb .wb:hover{background:rgba(127,127,127,.2)}#tb .wb.x:hover{background:#e5484d;color:#fff}
+/* header penonton */
+#top{display:none;flex:none;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 14px;background:var(--card-bg);border-bottom:1px solid var(--line);backdrop-filter:var(--blur)}
+body.sv #top{display:flex}
+.vchip{display:flex;align-items:center;gap:8px;background:var(--ctl-bg);border:1px solid var(--ctl-line);border-radius:var(--rad-c);padding:5px 12px;box-shadow:var(--sh-in)}
+.vchip img{width:20px;height:20px}.vchip b{font-size:16px}.vchip.off{display:none!important}
+/* v15.6.4: total like TikTok = tulisan kecil polos di kiri bawah jendela chat (tanpa kotak, tanpa glow); hanya di jendela chat (body.locked), disembunyikan saat kolom ketik terbuka */
+#cbl{display:none;position:absolute;left:10px;bottom:15px;z-index:5;align-items:center;gap:8px;font-size:12px;font-weight:600;line-height:1;color:rgba(255,255,255,.8);pointer-events:none;white-space:nowrap}
+body.locked #cbl{display:flex}#cbar.open~#cbl{display:none!important}
+#chl,#cts{padding:4px 9px;background:rgba(15,15,22,.92);border:1px solid rgba(255,255,255,.2);border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.55);color:#fff}/* v1.1.0: like & lama live dikotakkan */
+#chl{display:flex;align-items:center;gap:5px}#chl svg{width:12px;height:12px;flex:none;color:#ff4d6d}#chl.off,body.nolt #chl{display:none!important}
+/* v1.0.3: lama live = tulisan kecil polos (tanpa kotak) di kanan total like, kiri bawah jendela chat; ikut tersembunyi saat kolom ketik terbuka */
+#cts{display:flex;align-items:center;gap:4px;font-variant-numeric:tabular-nums}#cts svg{width:11px;height:11px;flex:none;opacity:.8}#cts b{font:inherit}#cts.off{display:none!important}
+/* v1.0.3: efek hati melayang (like TikTok) di kanan bawah, tepat di atas bulatan filter; tidak menerima klik */
+#hrt{position:absolute;right:-8px;bottom:56px;width:70px;height:190px;z-index:4;pointer-events:none}
+#hrt i{position:absolute;bottom:22px;left:50%;width:var(--hs,18px);height:var(--hs,18px);margin-left:calc(var(--hs,18px)/-2);color:var(--hc,#ff4d6d);opacity:0;animation:hrtUp var(--hd,2.4s) ease-out forwards}
+#hrx{position:absolute;left:0;right:0;bottom:0;text-align:center;font:800 15px 'Segoe UI',system-ui,sans-serif;color:#fff;text-shadow:0 1px 4px #000,0 0 2px #000;opacity:0;transition:opacity .2s}#hrx.on{opacity:1}
+#hrt i svg{display:block;width:100%;height:100%}
+#hrt i.em{font-size:calc(var(--hs,18px)*.95);line-height:var(--hs,18px);text-align:center;font-family:'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',sans-serif}
+@keyframes hrtUp{0%{opacity:0;transform:translate(0,0) scale(.4)}12%{opacity:1;transform:translate(0,-14px) scale(1)}100%{opacity:0;transform:translate(var(--hx,0),-180px) scale(.9)}}
+#tot{margin-left:auto;flex-direction:column;align-items:flex-end;gap:0;line-height:1.1;padding:4px 12px}#tot small{display:block;font-size:11px;color:var(--muted)}#tot b{font-size:20px}
+.anb{padding:0;width:38px;height:38px;justify-content:center;cursor:pointer;color:var(--acc);font:inherit}.anb:hover{filter:brightness(1.25)}
+body.overlay #top{position:absolute;top:12px;right:12px;border:0;background:#000a;border-radius:20px;padding:6px 10px;gap:8px;z-index:3;backdrop-filter:none}
+body.overlay .vchip{background:transparent;border:0;padding:0 4px;box-shadow:none}body.overlay #tot,body.overlay #anBtn,body.locked #anBtn{display:none}
+/* mode kunci: tiap kotak (YouTube, TikTok, Total) berdiri sendiri; ruang kosong di antaranya benar-benar transparan dan tidak menangkap klik */
+body.locked #top{background:transparent;border:0;padding:6px 8px;gap:8px;backdrop-filter:none}
+body.locked #top>.vchip{background:rgba(15,15,22,.92);border:1px solid rgba(255,255,255,.2);border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.55);color:#fff}
+body.locked #tot small{color:#c9d3da}
+/* daftar chat */
+#lw{flex:1;min-height:0;position:relative;display:flex}
+#list{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;padding:14px 16px;overflow:hidden;font-size:var(--fst)}
+#msgs{display:flex;flex-direction:column;gap:var(--gap);flex:none}
+/* #chat = wadah struktur "cozy": jarak antar pesan diatur CSS pengguna sendiri; --gap baru dipakai kalau slider "Jarak antar chat" digeser (lihat body.gap-set) */
+#chat{display:flex;flex-direction:column;flex:none}
+:is(#msgs,#chat):empty{display:none}
+body.dock #list{overflow-y:auto;justify-content:flex-start}
+body.dock #msgs{margin-top:auto}
+body.ot #list{justify-content:flex-start}body.ot.dock #msgs{margin-top:0}
+body.locked #list{overflow:hidden}
+body.locked.lkscroll #list{overflow-y:auto;scrollbar-width:none}body.locked.lkscroll #list::-webkit-scrollbar{display:none}
+/* v15.3.7: saat gembok + scroll, gelembung chat TEMBUS-KLIK; roda mouse hanya ditangkap strip tipis di tepi kanan chat */
+#lkstrip{display:none}
+body.locked.lkscroll #lkstrip{display:block;position:absolute;right:0;top:0;bottom:0;width:36px;z-index:5;cursor:ns-resize}
+body.locked.lkscroll #lkstrip i{position:absolute;right:6px;width:5px;border-radius:3px;background:#fff;opacity:.4;top:0;height:30px;box-shadow:0 0 3px #000a}
+body.locked.lkscroll #lkstrip:hover i{opacity:.8}
+body.locked.lkscroll.lkhook #lkstrip{display:none}
+body.locked.lkscroll #tobottom{z-index:6}
+#tobottom{display:none;position:absolute;left:50%;bottom:10px;transform:translateX(-50%);background:var(--acc);color:var(--acc-t);border:0;border-radius:16px;padding:7px 14px;font:700 12px 'Segoe UI',system-ui,sans-serif;cursor:pointer;box-shadow:0 2px 10px #0008;z-index:4}
+body.ot #tobottom{bottom:auto;top:10px}
+/* pesan (struktur standar = gaya Default) */
+.m{display:flex;gap:9px;line-height:1.35;color:var(--ctext,inherit)}
+.y{--c:var(--yc)}.t{--c:var(--tcl)}.w{--c:var(--wc)}.k{--c:var(--kc)}
+.pl{display:block;width:calc(var(--fsn)*1.3);height:calc(var(--fsn)*1.3);flex:none;margin-top:.1em}.pl img{display:block;width:100%;height:100%}
+.pi,.av{display:none}
+.hd{font-size:var(--fsn)}.nm{color:var(--c);font-weight:700}.nm i{font-style:normal}.tx{font-size:var(--fst);word-break:break-word}.tm{display:none;font-size:.7em;color:#b4b4c8;margin-left:6px}
+body.st .tm{display:inline}
+.bd{display:none;font-size:.62em;font-weight:700;padding:1px 6px;border-radius:4px;margin-left:6px;vertical-align:middle;background:#3b3b52;color:#fff;text-shadow:none}
+.mod.bd{background:#1f6f4a}.own.bd{background:#a8741a}
+.vip.bd{background:#b0306f}.m.isbot .bd.bot,.m.ismod .bd.mod,.m.isown .bd.own,.m.isvip .bd.vip{display:inline-block}
+body.nobt .m.isbot .bd.bot{display:none}.m.isbot{opacity:.82}body.hb .m.isbot{display:none}
+body.overlay.p-polos #list{text-shadow:0 1px 4px #000,0 0 2px #000} /* v15.6.3: Dock (body.locked) TANPA glow/bayangan pada font; hanya overlay OBS yang masih memakainya */
+body.cb .m:not(.p5-msg){background:var(--cbg);padding:6px 10px;border-radius:10px}
+body.na .av{display:none!important}
+/* Super Chat (Default): sorotan warna dari YouTube + pil nominal */
+.amt{display:none}
+.m.sc:not(.p5-msg){--sc:#ffca28;background:linear-gradient(90deg,color-mix(in srgb,var(--sc) var(--sco,38%),transparent),color-mix(in srgb,var(--sc) var(--sco2,8%),transparent));border-left:4px solid var(--sc);padding:6px 10px;border-radius:10px}
+.m.sc .amt{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;background:var(--sc);color:#1a1405;font-size:.78em;font-weight:800;vertical-align:middle;text-shadow:none}
+body.cb .m.sc:not(.p5-msg){background:linear-gradient(90deg,color-mix(in srgb,var(--sc) var(--sco,38%),transparent),color-mix(in srgb,var(--sc) var(--sco2,8%),transparent))}
+/* filter platform (dock): sembunyikan semua pesan dan aktivitas yang bukan dari platform terpilih */
+body.f-youtube :is(.m,.cs-act):not([data-platform="youtube"]),body.f-tiktok :is(.m,.cs-act):not([data-platform="tiktok"]),body.f-twitch :is(.m,.cs-act):not([data-platform="twitch"]),body.f-kick :is(.m,.cs-act):not([data-platform="kick"]){display:none}
+/* chat rata kanan (overlay) */
+body.al-right :is(#msgs,#chat){align-items:flex-end}
+body.al-right :is(.m,.cs-act){flex-direction:row-reverse;text-align:right}
+body.al-right .hd{justify-content:flex-end}
+/* animasi chat masuk (.m = struktur standar/p5, .msg = struktur rv) */
+body.an-slide :is(.m,.msg,.cs-act){animation:aSlide .35s ease both}body.an-fade :is(.m,.msg,.cs-act){animation:aFade .8s ease both}
+body.an-bounce :is(.m,.msg,.cs-act){animation:aBounce .6s cubic-bezier(.3,1.4,.5,1) both}body.an-zoom :is(.m,.msg,.cs-act){animation:aZoom .35s ease both}
+body.an-flip :is(.m,.msg,.cs-act){animation:aFlip .5s ease both}body.an-glitch :is(.m,.msg,.cs-act){animation:aGlitch .45s steps(2,end) both}
+body.an-type :is(.m,.msg,.cs-act){animation:aFade .2s ease both}body.an-type .tx>span,body.an-type .text{display:inline-block;animation:aType .9s steps(24,end) both}
+body.an-tpl .cs-act{animation:aFade .4s ease both}
+body.noanim *:not(#hrt):not(#hrt *),body.noanim *:not(#hrt):not(#hrt *)::before,body.noanim *:not(#hrt):not(#hrt *)::after{animation:none!important;transition:none!important} /* v1.1.0: efek hati / emoji (#hrt) tetap beranimasi saat chat ramai; dulu ikut dimatikan sehingga hilang mendadak */
+@keyframes aSlide{from{opacity:0;translate:-40px 0}to{opacity:1;translate:0 0}}
+@keyframes aFade{from{opacity:0}to{opacity:1}}
+@keyframes aBounce{0%{opacity:0;translate:0 40px;scale:calc(var(--sx,1)*.85) .85}60%{opacity:1;translate:0 -8px;scale:calc(var(--sx,1)*1.04) 1.04}80%{translate:0 3px}100%{translate:0 0;scale:var(--sx,1) 1}}
+@keyframes aZoom{from{opacity:0;scale:calc(var(--sx,1)*.5) .5}to{opacity:1;scale:var(--sx,1) 1}}
+@keyframes aFlip{from{opacity:0;rotate:x 90deg}to{opacity:1;rotate:x 0deg}}
+@keyframes aGlitch{0%{opacity:0;translate:-8px 0;filter:hue-rotate(90deg)}25%{opacity:1;translate:6px 0;filter:hue-rotate(-70deg)}50%{translate:-4px 0}75%{translate:3px 0;filter:none}100%{translate:0 0}}
+@keyframes aType{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+/* footer dock */
+body.locked.pinned:not(.lkscroll) #tobottom{display:none!important}
+/* ===== v15.6.2: bulatan chat + bulatan filter DI DALAM jendela chat, kanan bawah =====
+   [kolom ketik + kirim, muncul saat bulatan chat ditekan]  [bulatan chat] [bulatan filter]
+   Pilihan filter muncul KE ATAS dari bulatan filter. Mata / pin / pindah / tutup ada di jendela kecil di luar jendela chat (ctl.html, dibuat main.js). */
+#cbar{display:none;position:relative;flex:none;align-items:center;justify-content:flex-end;gap:8px;padding:6px 10px 10px;z-index:6}
+body.dock:not(.preview) #cbar{display:flex}
+.cbb{width:34px;height:34px;flex:none;border-radius:10px;background:#12181c;border:1px solid #33414a;color:#fff;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;opacity:.45;transition:opacity .15s,background .15s}
+.cbb:hover,.cbb.on{opacity:1;background:#1d2a31}
+.cbb.rnd{border-radius:50%}
+#cmp{display:none;flex:1;min-width:0;align-items:center;gap:6px}
+#cbar.open #cmp{display:flex}
+#msg{flex:1;min-width:0;height:34px;border-radius:17px;background:rgba(11,15,17,.94);border:1px solid #33414a;color:#fff;padding:0 14px;font:13px 'Segoe UI',system-ui,sans-serif}
+#send{background:var(--acc);border-color:var(--acc);color:var(--acc-t);opacity:1}
+#fltb img,#fltp img{width:18px;height:18px;object-fit:contain;display:block}
+#fltb svg{display:block}
+#fwrap{position:relative;flex:none}
+#fltp{display:none;position:absolute;right:0;bottom:100%;margin-bottom:8px;flex-direction:column-reverse;align-items:center;gap:6px;z-index:7}
+#cbar.fo #fltp{display:flex}
+#fltp .fo.on{opacity:1;border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+#cerr{display:none;position:absolute;left:10px;right:10px;bottom:100%;margin:0 0 2px;padding:6px 12px;border-radius:12px;background:rgba(170,34,34,.94);color:#fff;font:12px 'Segoe UI',system-ui,sans-serif;pointer-events:none}
+#cerr.show{display:block}
+#msg.err{border-color:var(--bad)!important}#msg.err::placeholder{color:var(--bad)}
+/* jendela kecil gembok + pindah */
+/* bilah judul Donate Dock (isi widget ada di jendela terpisah di bawahnya) */
+body.donatewin{background:var(--winbg)}
+body.donatewin #app,body.donatewin #panel,body.donatewin #tpl,body.donatewin #addwin,body.donatewin #rep,body.donatewin #sb,body.donatewin #dpv{display:none!important}
+/* ===== jendela pengaturan / kelola gaya / gaya baru ===== */
+#panel,#tpl,#addwin,#rep{display:none}
+body.reportwin #app,body.reportwin #panel,body.reportwin #tpl,body.reportwin #addwin{display:none}
+body.reportwin,body.reportwin{background:var(--winbg)}
+body.settings #rep,body.tplwin #rep,body.addwin #rep{display:none}
+body.settings #app,body.settings #lockhint,body.tplwin #app,body.tplwin #panel,body.addwin #app,body.addwin #panel,body.addwin #tpl,body.tplwin #addwin,body.settings #tpl,body.settings #addwin{display:none}
+body.settings #panel{display:flex;flex-direction:column;position:absolute;inset:34px 0 0 0;overflow:hidden;padding:0;font-size:13px}
+#panes{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;padding:0 18px}
+body.tplwin #tpl{display:block;position:absolute;inset:34px 0 0 0;overflow:auto;padding:22px;font-size:13px}
+body.addwin #addwin{display:flex;position:absolute;inset:34px 0 0 0;flex-direction:column;padding:18px 22px;gap:14px;font-size:13px}
+.tabs{flex:none;background:var(--winbg);padding:14px 18px 12px;border-bottom:1px solid var(--line);backdrop-filter:var(--blur)}
+.tabrow{display:flex;background:var(--ctl-bg);border:1px solid var(--ctl-line);box-shadow:var(--sh-in);border-radius:calc(var(--rad-c) + 3px);padding:4px;gap:4px}
+.tab{flex:1;padding:8px 4px;border:0;border-radius:var(--rad-c);background:transparent;color:var(--muted);font:600 13px 'Segoe UI',sans-serif;cursor:pointer}.tab:hover{color:var(--text)}.tab.on{background:var(--acc);color:var(--acc-t);box-shadow:var(--sh-btn)}
+.pane{display:none}.pane.on{display:flex;flex-direction:column;flex:1;padding-top:14px}.pane>.card{flex:none}
+.card,.tcard{background:var(--card-bg);border:1px solid var(--line);border-radius:var(--rad);box-shadow:var(--sh-card);backdrop-filter:var(--blur)}
+.card{padding:16px;margin-bottom:14px}
+.card h3{margin:0 0 6px;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+#panel label,#addwin label,#dnModal label{display:flex;justify-content:space-between;margin:12px 0 5px;color:var(--muted);font-size:12px}
+#panel label b,#dnModal label b{color:var(--text);font-weight:600}
+#panel input[type=text],#panel input[type=number],#panel select,#dnModal input[type=text],#addwin input[type=text],#addwin textarea{width:100%;height:38px;background:var(--ctl-bg);border:1px solid var(--ctl-line);box-shadow:var(--sh-in);border-radius:var(--rad-c);padding:0 11px;color:var(--text);font:inherit}
+#panel select option{background:#1b2329;color:#e8eef0}
+#addwin textarea{height:100%;min-height:200px;padding:10px 11px;font:12px/1.5 Consolas,Menlo,monospace;resize:none}
+#panel input:focus,#panel select:focus,#addwin input:focus,#addwin textarea:focus,#msg:focus{border-color:var(--acc)!important}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:28px;background:transparent;cursor:pointer;margin:0;touch-action:none}
+input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:6px;background:linear-gradient(90deg,var(--acc) var(--pct,50%),var(--ctl-bg) var(--pct,50%));box-shadow:var(--sh-in);border:1px solid var(--ctl-line)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;margin-top:-8px;border-radius:50%;background:var(--acc);border:3px solid var(--winbg);box-shadow:0 1px 6px rgba(0,0,0,.45)}
+body:not(.overlay) .row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:9px 0;padding:2px 0;font-size:13px}body:not(.overlay) .row input[type=checkbox]{width:18px;height:18px;accent-color:var(--acc)}
+.btn{border:0;border-radius:var(--rad-c);height:38px;padding:0 14px;color:var(--text);cursor:pointer;font:700 13px 'Segoe UI',sans-serif;flex:1;transition:filter .15s;box-shadow:var(--sh-btn)}.btn:hover{filter:brightness(1.12)}.btn.sm{height:34px;flex:none}
+.b1{background:var(--acc);color:var(--acc-t)}.b2{background:#d9453d;color:#fff}.b3{background:transparent;border:1px solid var(--acc);color:var(--text);box-shadow:none}.b4{background:var(--btn2)}
+.btns{display:flex;gap:8px;margin-top:10px}
+.bar{position:sticky;bottom:0;margin:auto -18px 0;padding:14px 18px;display:flex;gap:8px;flex:none;background:var(--winbg);border-top:1px solid var(--line);backdrop-filter:var(--blur)}
+.hint{font-size:12px;color:var(--muted);line-height:1.55;margin:6px 0}.dim{color:var(--muted);font-size:12px}
+#st{font-size:12px;line-height:1.6;color:var(--muted);margin-top:8px;white-space:pre-line}
+.acc{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:8px 0}.acc img{width:16px;height:16px;vertical-align:-3px;margin-right:4px}.ok{color:var(--good)}.no{color:var(--bad)}
+.g2{display:flex;gap:8px}#obsmsg{margin-top:8px}
+.selrow{display:flex;gap:8px}.selrow select{flex:1}
+details{margin-top:10px}summary{cursor:pointer;font-weight:600;font-size:13px}
+.hk{display:grid;grid-template-columns:1fr 38px 180px;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}.hk:last-child{border-bottom:0}
+.hk .hkl{font-size:13px}.hk input{text-align:center;cursor:pointer;height:34px!important;font-weight:600}.hk input.cap{border-color:var(--acc)}
+.hk .hks{grid-column:1/4;font-size:11px;color:var(--bad);margin-top:-2px}
+/* kelola gaya (mirip dialog tambah sumber OBS) */
+#tpl h1{margin:0 0 4px;font-size:20px}#tpl .sub{color:var(--muted);margin-bottom:16px}
+.addbtn{width:100%;height:64px;border:2px dashed var(--line);border-radius:var(--rad);background:transparent;color:var(--text);font:600 15px 'Segoe UI',sans-serif;cursor:pointer;margin-bottom:16px}.addbtn:hover{border-color:var(--acc);color:var(--acc)}
+#tplList{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+.tcard{overflow:hidden;cursor:default}
+.tcard .pv{position:relative;height:190px;background:#14141c;overflow:hidden}
+.tcard .pv iframe{border:0;position:absolute;left:0;top:0;width:480px;height:380px;transform:scale(.5);transform-origin:0 0;pointer-events:none}
+.tcard .tf{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;gap:8px}
+.tcard .tf b{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tag2{font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:var(--btn2);color:var(--muted);flex:none}
+.tcard.cu{cursor:pointer}.tcard.cu:hover{border-color:var(--acc)}
+.tcard .del{border:0;border-radius:8px;background:#d9453d;color:#fff;font:700 12px 'Segoe UI',sans-serif;padding:6px 10px;cursor:pointer;flex:none}
+#addwin .cols{display:grid;grid-template-columns:1.1fr 1fr;gap:16px;flex:1;min-height:0}
+#addwin .colL{display:flex;flex-direction:column;min-height:0}
+#addwin .colR{display:flex;flex-direction:column;min-height:0}
+#addwin .pvbox{flex:1;min-height:0;border:1px solid var(--line);border-radius:var(--rad);overflow:hidden;background:#14141c}
+#addwin iframe{border:0;width:100%;height:100%}
+#addwin .foot{display:flex;gap:8px;justify-content:flex-end}#addwin .foot .btn{flex:none;min-width:120px}
+
+/* ===== tema aplikasi (hanya untuk jendela aplikasi, bukan overlay) ===== */
+body.th-neo{--base:227,232,239;--winbg:#e3e8ef;--card-bg:#e3e8ef;--sh-card:8px 8px 18px #c2c9d6,-8px -8px 18px #fff;--line:transparent;--ctl-bg:#e3e8ef;--ctl-line:transparent;--sh-in:inset 4px 4px 9px #c2c9d6,inset -4px -4px 9px #fff;--sh-btn:5px 5px 11px #c2c9d6,-5px -5px 11px #fff;--rad:22px;--rad-c:14px;--text:#364154;--muted:#76839a;--acc:#139a8c;--acc-t:#fff;--btn2:#e3e8ef;--yc:#c4262e;--tcl:#0b8f98;--wc:#6d2fd0;--kc:#2a8a0c}
+body.th-glass{--base:8,16,30;--winbg:radial-gradient(800px 560px at 8% 0%,#0e7490aa,transparent),radial-gradient(700px 560px at 100% 100%,#be3a6bb0,transparent),radial-gradient(500px 400px at 80% 10%,#d9a40e55,transparent),#08101d;--card-bg:rgba(255,255,255,.075);--blur:blur(18px) saturate(140%);--line:rgba(255,255,255,.17);--ctl-bg:rgba(255,255,255,.07);--ctl-line:rgba(255,255,255,.18);--rad:18px;--rad-c:12px;--text:#f1f6fa;--muted:#a5b6c4;--acc:#5eead4;--acc-t:#062a27;--btn2:rgba(255,255,255,.1)}
+body.th-clay{--base:244,230,216;--winbg:#f4e6d8;--card-bg:#ffdcc8;--sh-card:10px 10px 22px #d6b6a0,-6px -6px 16px #fff4ec,inset -4px -4px 10px rgba(120,60,30,.08),inset 4px 4px 10px rgba(255,255,255,.7);--line:transparent;--ctl-bg:#fff1e7;--ctl-line:transparent;--sh-in:inset 3px 3px 7px #e1c5b4,inset -3px -3px 7px #fffaf5;--sh-btn:4px 4px 9px #d6b6a0,-3px -3px 8px #fff4ec,inset -2px -2px 5px rgba(0,0,0,.08),inset 2px 2px 5px rgba(255,255,255,.6);--rad:28px;--rad-c:18px;--text:#5a3d33;--muted:#9a7466;--acc:#ff6f61;--acc-t:#fff;--btn2:#ffe9dc;--yc:#c2332b;--tcl:#0e7f87;--wc:#6d2fd0;--kc:#2a8a0c}
+body.th-liquid{--base:7,26,46;--winbg:radial-gradient(700px 500px at 15% 10%,#22d3ee66,transparent),radial-gradient(700px 600px at 90% 90%,#34d39966,transparent),linear-gradient(140deg,#071a2e,#0b3a5b 55%,#0f5f73);--card-bg:linear-gradient(135deg,rgba(255,255,255,.2),rgba(255,255,255,.05));--blur:blur(26px) saturate(180%);--sh-card:inset 0 1px 0 rgba(255,255,255,.55),inset 0 -1px 0 rgba(255,255,255,.1),0 12px 30px rgba(0,0,0,.35);--line:rgba(255,255,255,.3);--ctl-bg:rgba(255,255,255,.1);--ctl-line:rgba(255,255,255,.28);--sh-in:inset 0 1px 3px rgba(0,0,0,.25);--sh-btn:inset 0 1px 0 rgba(255,255,255,.5),0 4px 12px rgba(0,0,0,.25);--rad:26px;--rad-c:16px;--text:#f4fbff;--muted:#b3cde0;--acc:#7defff;--acc-t:#04222b;--btn2:rgba(255,255,255,.16)}
+body.th-spatial{--base:20,21,26;--winbg:radial-gradient(1100px 700px at 50% -15%,#343a4c,#0d0e12 62%);--card-bg:rgba(70,74,88,.42);--blur:blur(32px);--sh-card:0 22px 44px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.14);--line:rgba(255,255,255,.1);--ctl-bg:rgba(255,255,255,.08);--ctl-line:rgba(255,255,255,.1);--rad:30px;--rad-c:22px;--text:#f5f5f7;--muted:#a3a6b3;--acc:#f5f5f7;--acc-t:#101114;--btn2:rgba(255,255,255,.12)}
+body.th-neo .tcard .pv,body.th-clay .tcard .pv{background:#2a2a35}
+
+.stat{display:flex;gap:8px;margin:10px 0 4px}
+.chip2{flex:1;display:flex;align-items:center;gap:8px;background:var(--ctl-bg);border:1px solid var(--ctl-line);box-shadow:var(--sh-in);border-radius:var(--rad-c);padding:8px 10px;font-size:12px;color:var(--muted)}
+.chip2 img{width:18px;height:18px}.chip2 b{margin-left:auto;font-size:12px}
+.steps{list-style:none;margin:12px 0 4px;padding:0;display:flex;flex-direction:column;gap:14px;counter-reset:s}
+.steps li{display:flex;gap:12px;align-items:flex-start}
+.sn{flex:none;width:26px;height:26px;border-radius:50%;background:var(--acc);color:var(--acc-t);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;margin-top:1px}
+.sb{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}.sb>b{font-size:13px;color:var(--text)}.sb>span{font-size:12px;color:var(--muted);line-height:1.55}
+.sb .btns{margin-top:6px;flex-wrap:wrap}.sb .btn.sm{flex:1}
+code{background:var(--ctl-bg);border-radius:5px;padding:1px 6px;font-size:12px;color:var(--acc)}
+/* struktur rv (gaya dengan #log, .badge, .p-yt / .p-tt) */
+body.s-rv #log{flex:1 1 auto;min-height:0}
+body.zm :is(.nm,.name){zoom:var(--zn,1)}body.zm :is(.tx,.text){zoom:var(--zt,1)}
+body.gap-set :is(#msgs,#log,#chat){gap:var(--gap)!important}
+body.ot :is(#msgs,#log,#chat){justify-content:flex-start!important}
+body.al-right :is(#msgs,#log,#chat){align-items:flex-end}
+body.al-right.s-rv .msg{--sx:-1;scale:var(--sx) 1;align-self:flex-end!important}
+body.al-right.s-rv .badge>*,body.al-right.s-rv .body>*{scale:-1 1}
+.isbot{opacity:.82}body.hb .isbot{display:none}
+body.f-youtube .p-tt,body.f-tiktok .p-yt{display:none}
+
+#boot{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:var(--winbg);color:var(--muted);font:13px 'Segoe UI',sans-serif;text-align:center;padding:20px;white-space:pre-line}
+body.overlay #boot,body.locked #boot,body.preview #boot{display:none}
+
+.avm{position:fixed;inset:0;z-index:200;background:color-mix(in srgb,rgb(var(--base,14,18,20)) 60%,#000);display:flex;align-items:center;justify-content:center;padding:16px}.avm[hidden]{display:none}
+.avbox{background-color:rgb(var(--base,21,27,31));background-image:var(--winbg);border:1px solid var(--line);border-radius:var(--rad-c,10px);padding:16px 18px;max-width:440px;width:100%;max-height:85vh;overflow:auto;color:var(--text);box-shadow:0 18px 50px rgba(0,0,0,.6)}
+.avbox h3{margin:0 0 6px}.avrow{display:flex;gap:12px;padding:5px 0;border-bottom:1px solid var(--line);font-size:13px}.avrow b{min-width:52px;font-variant-numeric:tabular-nums}.avrow span{color:var(--muted)}
+
+/* ===== aktivitas (bergabung, hadiah, dst.) ===== */
+.cs-act{display:flex;align-items:center;gap:12px;width:fit-content;max-width:100%;padding:7px 14px;margin:2px 0;border-radius:10px;font-size:calc(var(--fst)*.88);line-height:1.3;word-break:break-word}
+.pln{width:1.1em;height:1.1em;vertical-align:-.2em}.cs-act .ai .pln{display:block;width:1.3em;height:1.3em}
+.cs-act .lg{width:1.2em;height:1.2em;flex:none}.cs-act .ai{flex:none}.cs-act .ai img{display:block;width:1.7em;height:1.7em;object-fit:contain}.cs-act b{font-weight:700}
+.cs-act.sample{opacity:1}
+/* v15.5.3/15.5.4: notif TikTok (bergabung + like) = bar selebar jendela tepat di bawah "Total penonton", khusus Dock. Melayang di atas chat (tidak menggeser daftar chat) dan tembus klik. */
+#nt{display:none}
+body.dock #nt{display:flex;flex-direction:column;align-items:stretch;position:absolute;top:0;left:0;right:0;z-index:4;pointer-events:none}
+#ntj,#ntl{display:flex;flex-direction:column;align-items:stretch}
+#nt .cs-act{width:100%;max-width:100%;box-sizing:border-box;justify-content:center;margin:0 0 2px;border-radius:0;transition:opacity .4s}#nt .cs-act.out{opacity:0}
+/* Super Chat: warna font / nominal / member, diatur dari pengaturan YouTube */
+.hasfc :is(.tx,.text,.p5-text){color:var(--scf)!important}
+.m.sc.sc-nobg:not(.p5-msg){background:none!important;border-left:0!important;padding:0!important}
+.m.noamt .amt{display:none!important}
+/* v1.1.0: moderator YouTube (warna dari pengaturan, bawaan biru YouTube) */
+.m.ytmod .bd.mod{background:var(--mdc,#5e84f1)}.m.ytmod.nomod1 .bd.mod{display:none!important}.m.ismod.ytmod.hasmdc .nm{color:var(--mdc)!important}
+.mem.bd{background:#1f7a3a}.m.ismem .bd.mem{display:inline-block}.m.nomem1 .bd.mem{display:none!important}
+/* emote (gambar kecil di dalam teks chat Twitch / Kick) */
+.cs-emo{display:inline-block;height:1.55em;width:auto;vertical-align:middle;margin:-.25em 1px}
+/* v1.0.2: Super Sticker (di dalam teks chat) dan emblem member YouTube (sebelum nama) */
+.cs-stk{display:inline-block;height:3.6em;width:auto;max-width:100%;vertical-align:middle;margin:2px 0}
+.cs-mbd{display:inline-block;height:1.2em;width:auto;vertical-align:middle;margin:-.1em 4px 0 0}
+.m.isme .tx>span,.m.isme .text{font-style:italic}
+body:is(.dock,.p-polos) .m.ishl:not(.sc):not(.p5-msg){background:color-mix(in srgb,var(--c) 24%,transparent);border-left:4px solid var(--c);padding:6px 10px;border-radius:10px}
+.m.ismem.hasmc .nm{color:var(--mc)!important}
+/* ===== pengaturan per platform ===== */
+.plat{display:flex;align-items:center;gap:12px;width:100%;margin:8px 0 0;padding:10px 12px;background:var(--ctl-bg);border:1px solid var(--ctl-line);box-shadow:var(--sh-in);border-radius:var(--rad-c);color:var(--text);cursor:pointer;text-align:left;font:inherit}
+.plat:hover{border-color:var(--acc)}.plat img{width:26px;height:26px;flex:none}.plat span{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}.plat b{font-size:14px}.plat small{font-size:11px;color:var(--muted)}.plat i{font-style:normal;font-size:22px;color:var(--muted)}
+.pghead{display:flex;align-items:center;gap:12px;margin-bottom:14px}.pghead b{display:flex;align-items:center;gap:8px;font-size:15px}.pghead img{width:20px;height:20px}
+.acttl{font-weight:700;font-size:13px;margin:6px 0 2px}.actbox{border-top:1px solid var(--line);padding-top:4px;margin-top:8px}.actbox:first-of-type{border-top:0;margin-top:0}
+.dep{margin:2px 0 6px 10px;padding-left:12px;border-left:2px solid var(--line)}
+/* v15.6.5: pengaturan TikTok (Pribadi dan Overlay) dikotak-kotakkan: tiap jenis aktivitas satu kotak; di Gift (Pribadi) "tampilkan di chat" dan "alert" dikotak sendiri. Hanya halaman TikTok. */
+#pgb_dock_tt .actbox,#pgb_overlay_tt .actbox{border:1px solid var(--line);border-radius:var(--rad-c);background:rgba(var(--base),.4);box-shadow:var(--sh-in);padding:10px 12px 6px;margin:0 0 10px}
+#pgb_dock_tt .actbox:last-child,#pgb_overlay_tt .actbox:last-child{margin-bottom:2px}
+#pgb_dock_tt .actbox .actbox,#pgb_overlay_tt .actbox .actbox{margin:8px 0 4px}
+#pgb_dock_tt .actbox>.acttl:first-child,#pgb_overlay_tt .actbox>.acttl:first-child{margin-top:0}
+#pgb_dock_tt [data-dep$="_ttAct"],#pgb_overlay_tt [data-dep$="_ttAct"]{margin-left:0;padding-left:0;border-left:0}
+.pv{margin:10px 0 4px;padding:12px;border-radius:var(--rad-c);background:repeating-conic-gradient(#3a3d4a 0 25%,#24262f 0 50%) 0 0/20px 20px;display:flex;flex-direction:column;gap:8px;color:#fff;--fst:15px;--fsn:15px}
+.pv .m{color:#fff}
+/* ===== jendela laporan ===== */
+body.reportwin #rep{display:flex;flex-direction:column;position:absolute;inset:34px 0 0 0;font-size:13px}
+.rhead{display:flex;align-items:center;gap:10px;padding:12px 20px;border-bottom:1px solid var(--line);background:var(--winbg);flex:none}
+.rhead select{height:36px;min-width:280px;max-width:60%;background:var(--ctl-bg);border:1px solid var(--ctl-line);box-shadow:var(--sh-in);border-radius:var(--rad-c);color:var(--text);padding:0 10px;font:inherit}
+.rhead select option{background:#1b2329;color:#e8eef0}.rhead .sp{flex:1}
+#rlive{color:var(--bad);font-weight:700;font-size:12px;animation:rblink 1.6s ease infinite}@keyframes rblink{50%{opacity:.35}}
+#rbody{flex:1;overflow:auto;padding:18px 20px 28px;display:flex;flex-direction:column;gap:14px}
+.rg{display:grid;gap:14px}.rg4{grid-template-columns:repeat(4,1fr)}.rg2{grid-template-columns:1fr 1fr}
+#rbody .card{margin:0}.kpi .lb{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}.kpi .vl{font-size:30px;font-weight:700;margin:4px 0 2px;line-height:1.1}.kpi .sb2{font-size:12px;color:var(--muted);line-height:1.5}
+.dy{color:var(--yc)}.dt{color:var(--tcl)}.dw{color:var(--wc)}.dk{color:var(--kc)}
+.kkopt{margin:10px 0 2px}.kkopt summary{cursor:pointer;font-size:12px;color:var(--muted)}.kkopt input{width:100%;margin-top:6px}
+.chartbox{position:relative;margin-top:6px}.chartbox svg{display:block;width:100%;height:auto}
+.leg{display:flex;gap:16px;font-size:12px;color:var(--muted);margin-top:4px}.leg i{display:inline-block;width:12px;height:3px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.tip{position:absolute;pointer-events:none;background:var(--card-bg);border:1px solid var(--line);box-shadow:0 6px 18px rgba(0,0,0,.4);border-radius:8px;padding:6px 10px;font-size:12px;line-height:1.5;white-space:nowrap;display:none;z-index:5}
+table.rt{width:100%;border-collapse:collapse;font-size:13px}.rt th{text-align:left;font-weight:600;color:var(--muted);font-size:11px;letter-spacing:.05em;text-transform:uppercase;padding:6px 8px;border-bottom:1px solid var(--line)}
+.rt td{padding:8px;border-bottom:1px solid var(--line)}.rt tr:last-child td{border-bottom:0}.rt td.n,.rt th.n{text-align:right;font-variant-numeric:tabular-nums}
+.rbar{height:6px;border-radius:3px;background:var(--acc);opacity:.75;min-width:2px}
+.rl{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)}.rl:last-child{border-bottom:0}.rl span:first-child{color:var(--muted)}.rl b{font-variant-numeric:tabular-nums}
+.rl img{width:14px;height:14px;vertical-align:-2px;margin-right:6px}
+.rhead #rflt{min-width:150px;max-width:200px} /* v15.3.5: filter platform laporan + baris aktivitas yang bisa diklik */
+.rl.clk{cursor:pointer;user-select:none}.rl.clk:hover span:first-child{color:var(--text)}
+.evl{max-height:220px;overflow:auto;margin:2px 0 6px 12px;padding-left:10px;border-left:2px solid var(--line)}.evl .rl span:first-child{color:var(--text)}.evl .rl b{color:var(--muted);font-weight:500}
+#evm{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px}
+#evm .evw{width:min(460px,100%);max-height:80vh;display:flex;flex-direction:column;background:var(--winbg);border:1px solid var(--line);border-radius:var(--rad-c);box-shadow:0 12px 36px rgba(0,0,0,.5);color:var(--text)}
+#evm .evh{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line)}#evm .evh .btn{min-width:70px}
+#evm .evb{overflow:auto;padding:8px 14px 12px;display:flex;flex-direction:column;min-height:0}#evm .evl{max-height:none;margin:0;padding:0;border:0}
+.rpi{width:16px;height:16px;vertical-align:-3px;margin-right:6px}
+
+/* ===== Dashboard (sidebar + beranda + pratinjau kanan) ===== */
+#sb,#dpv{display:none}
+body.dashboard .tabs{display:none}
+body.dashboard #sb{display:flex;flex-direction:column;gap:4px;position:absolute;left:0;top:34px;bottom:0;width:190px;padding:12px 10px;background:var(--card-bg);border-right:1px solid var(--line);font-size:13px}
+.sbi{width:100%;text-align:left;padding:10px 12px;border:0;border-radius:var(--rad-c);background:transparent;color:var(--text);font:600 13px 'Segoe UI',sans-serif;cursor:pointer}
+.sbi:hover{background:rgba(127,127,127,.14)}.sbi.on{background:var(--btn2)}
+.sbl{height:1px;background:var(--line);margin:8px 4px}.sbsp{flex:1}
+.sbver{padding:6px 12px 2px;font-size:11px;color:var(--muted);letter-spacing:.02em}
+.sbvr{display:flex;align-items:center;justify-content:space-between}
+.sbupd{border:0;background:none;box-shadow:none;padding:6px 12px 2px;font:inherit;font-size:11px;color:var(--muted);letter-spacing:.02em;cursor:pointer;white-space:nowrap}.sbupd:hover{color:var(--text);text-decoration:underline}.sbupd:disabled{cursor:default;text-decoration:none}
+body.dashboard #panel{left:190px}
+body.dashboard.rview #panel{display:none}
+body.dashboard.rview #rep{display:flex;flex-direction:column;position:absolute;top:34px;bottom:0;left:190px;right:0;font-size:13px}
+body.dashboard.split #panel{right:auto;width:calc((100% - 190px) / 2)}
+body.dashboard.split #dpv{display:block;position:absolute;top:34px;bottom:0;right:0;left:calc(190px + (100% - 190px) / 2);border-left:1px solid var(--line);background:#14141c}
+.pvbar{position:absolute;top:0;left:0;right:0;height:52px;display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--card-bg);backdrop-filter:var(--blur);z-index:2}
+.pvbar .btn{flex:none;background:var(--btn2);color:var(--text);border:1px solid var(--ctl-line);padding:0 12px;font-size:12px}
+.pvbar .btn.on{background:var(--acc);color:var(--acc-t);border-color:var(--acc)}
+.pvwrap{position:absolute;top:52px;left:0;right:0;bottom:0}
+.pvnote{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;color:var(--muted);font-size:13px;line-height:1.6}.pvnote[hidden]{display:none}
+#dpv iframe{display:none;width:100%;height:100%;border:0;pointer-events:none}
+body[data-pv=p] #pvD,body[data-pv=o] #pvO{display:block}
+/* v15.4.0: pratinjau alert Gift/Like di DALAM pengaturan alert: halaman ?view=galert yang SAMA dengan jendela alert asli (lebar GAW=320). Hanya di Dashboard. */
+.apv{position:relative;width:320px;max-width:100%;margin:4px 0 10px;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:linear-gradient(135deg,#59647a,#2f3747)}
+.apv iframe{display:block;width:100%;height:190px;border:0;background:transparent;pointer-events:none}
+body:not(.dashboard) .apvw{display:none}
+/* v15.4.0: dialog "Perubahan belum diterapkan" */
+.cfbox{max-width:460px}
+#cfList{margin:8px 0 10px;max-height:46vh;overflow:auto}
+.cfg{margin:10px 0 2px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}.cfg:first-child{margin-top:0}
+.cfr{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px}
+.cfr>div:first-child{min-width:0}.cfr b{font-weight:600}.cfr small{display:block;margin-top:1px;font-size:11px;color:var(--muted)}
+.cfv{display:flex;align-items:center;gap:6px;flex:none;max-width:55%;text-align:right;font-variant-numeric:tabular-nums}
+.cfv em{font-style:normal;color:var(--muted)}.cfo{color:var(--muted)}.cfn{font-weight:700;color:var(--text)}
+.cfsw{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-2px;border:1px solid var(--line)}
+body.dock #wmin{display:none}
+/* belum dikunci: kotak platform & total penonton cukup ikon + angka (tanpa bulatan/bingkai seperti tombol); saat dikunci tetap berkotak supaya terbaca di atas game */
+body.dock:not(.locked) #top{gap:18px}
+body.dock:not(.locked) #top>.vchip{background:none;border:0;box-shadow:none;border-radius:0;padding:0}
+/* pratinjau Pribadi di Dashboard = hanya daftar chat, tanpa bar atas dan kolom kirim */
+body.dock.preview #top,body.dock.preview #cbar{display:none!important}
+body.dock.preview #app{top:0;background:transparent}
+.dwel h2{margin:0 0 6px;font-size:20px}
+.dsr{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--line);font-size:13px}
+.dsr:first-child{border-top:0}.dsg+.dsg{border-top:1px solid var(--line)}.dsu{padding:0 0 8px 26px;font-size:12px;color:var(--muted);overflow-wrap:anywhere}.dsb{display:flex;gap:8px;margin-top:10px}.dsr span:first-child{display:flex;align-items:center;gap:8px;font-weight:600}.dsr img{width:18px;height:18px}
+.dsr span:last-child{color:var(--muted)}
+body.dashboard .wbs{display:flex;flex:none}
+#sb .btn{flex:none;width:100%}
+
+/* ===== switch platform di Koneksi ===== */
+#panel label.sw{display:block;position:relative;width:44px;height:26px;margin:0;flex:none;cursor:pointer}
+.sw input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer;z-index:1}
+.sw i{position:absolute;inset:0;border-radius:99px;background:var(--btn2);border:1px solid var(--ctl-line);transition:background .15s,border-color .15s}
+.sw i::after{content:'';position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--muted);transition:left .15s,background .15s}
+.sw input:checked+i{background:var(--acc);border-color:var(--acc)}
+.sw input:checked+i::after{left:20px;background:var(--acc-t)}
+.sw input:disabled{cursor:wait}
+.cn{margin-top:0;padding:10px 12px 12px;border:1px solid var(--line);border-radius:var(--rad-c)}
+/* v15.3.0: kartu platform 2 kolom; kotak username + status satu baris (status turun ke bawah kalau kartu terlalu sempit) */
+.cng{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
+@media(max-width:760px){.cng{grid-template-columns:minmax(0,1fr)}}
+.cnr{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px}
+#panel .cnr input[type=text]{width:auto;flex:1 1 130px;min-width:0}
+.cnr .cst{margin:0;flex:0 1 auto;white-space:nowrap}
+.cnh{display:flex;align-items:center;gap:10px;margin-bottom:8px}.cnh img{width:22px;height:22px;flex:none}.cnh b{flex:1;font-size:14px}
+.cn.off input[type=text]{display:none}.cn.off input[type=number]{opacity:.45}
+.stat{flex-wrap:wrap}.stat .chip2{flex:1 1 40%}
+
+/* kirim chat dimatikan: kotak isi chat dan tombol kirim hilang; filter platform dan gembok tetap ada */
+body.nosend #msg,body.nosend #send{display:none!important}
+/* v15.6.2: kolom ketik tidak ada kalau Kirim Chat mati, jadi bulatan chat (pembukanya) ikut disembunyikan; bulatan filter tetap */
+body.nosend #cb_chat{display:none!important}
+/* v15.6.0: mode gembok (pin) bersudut membulat; jendelanya transparan, jadi sudut di luar lengkung tembus pandang */
+body.locked #app{border-radius:18px;overflow:hidden}
+/* v15.6.1: HANYA SATU tampilan (jendela transparan, kotak penonton terpisah). Pin = klik tembus; tidak terpin = bingkai tipis + pegangan resize di tepi atas, samping, dan sudut atas (#rz; v15.6.2: sisi bawah tidak ada),
+   chat boleh di-scroll (tombol "Chat terbaru" muncul), dan jendela menerima klik di seluruh areanya. Tampilan jendela biasa berlatar gelap yang dulu ada sudah dihapus. */
+#rz{display:none;position:absolute;inset:0;z-index:8;pointer-events:none} /* v15.6.3: di atas #cbar (z 6) dan #fltp (z 7), kalau tidak baris bawah menutupi pegangan sisi bawah */
+#rz .rz{position:absolute;pointer-events:auto;touch-action:none;user-select:none}
+#rz .n{left:18px;right:18px;top:0;height:8px;cursor:ns-resize}
+#rz .s{left:18px;right:18px;bottom:0;height:8px;cursor:ns-resize}
+#rz .e{top:18px;bottom:18px;right:0;width:8px;cursor:ew-resize}
+#rz .w{top:18px;bottom:18px;left:0;width:8px;cursor:ew-resize}
+#rz .ne{top:0;right:0;width:18px;height:18px;cursor:nesw-resize}
+#rz .nw{top:0;left:0;width:18px;height:18px;cursor:nwse-resize}
+#rz .se{bottom:0;right:0;width:18px;height:18px;cursor:nwse-resize}
+#rz .sw{bottom:0;left:0;width:18px;height:18px;cursor:nesw-resize}
+#rz .ne::before,#rz .nw::before,#rz .se::before,#rz .sw::before{content:'';position:absolute;width:9px;height:9px;border:0 solid rgba(255,255,255,.85);filter:drop-shadow(0 0 2px #000)}
+#rz .nw::before{left:5px;top:5px;border-left-width:3px;border-top-width:3px;border-top-left-radius:6px}
+#rz .ne::before{right:5px;top:5px;border-right-width:3px;border-top-width:3px;border-top-right-radius:6px}
+#rz .se::before{right:5px;bottom:5px;border-right-width:3px;border-bottom-width:3px;border-bottom-right-radius:6px}
+#rz .sw::before{left:5px;bottom:5px;border-left-width:3px;border-bottom-width:3px;border-bottom-left-radius:6px}
+body.locked:not(.pinned) #rz{display:block}
+body.locked:not(.pinned) #app::after{content:'';position:absolute;inset:0;border-radius:18px;box-shadow:inset 0 0 0 2px rgba(255,255,255,.35);pointer-events:none;z-index:5} /* v15.6.3: bingkai penuh sampai bawah (sisi bawah kini bisa di-resize); mask-image dihapus = satu lapisan komposit lebih sedikit */
+body.locked:not(.pinned) #list{overflow-y:auto;scrollbar-width:none}body.locked:not(.pinned) #list::-webkit-scrollbar{display:none}
+.h3sw{display:flex;align-items:center;justify-content:space-between}
+/* status koneksi yang rapi */
+#st{white-space:normal}
+#st .sr{display:flex;align-items:center;gap:8px;padding:5px 0}
+#st .sr img{width:16px;height:16px;flex:none}
+#st .sr b{font-weight:600;color:var(--text)}
+#st .sr .sv{margin-left:auto;display:flex;align-items:center;gap:6px}
+#st .sr .sv::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--muted)}
+#st .sr .sv.ok{color:#4ade80}#st .sr .sv.ok::before{background:#4ade80}
+#st .sr .sv.wait{color:#fbbf24}#st .sr .sv.wait::before{background:#fbbf24}
+#st .sr .sv.bad{color:#f87171}#st .sr .sv.bad::before{background:#f87171}
+
+/* status koneksi di Dashboard: sama rapinya dengan status di tab Koneksi */
+.dsr .dsv{display:flex;align-items:center;gap:6px;text-align:right}
+.dsr .dsv::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+.dsr .dsv.ok{color:#4ade80}.dsr .dsv.ok::before{background:#4ade80}
+.dsr .dsv.wait{color:#fbbf24}.dsr .dsv.wait::before{background:#fbbf24}
+.dsr .dsv.bad{color:#f87171}.dsr .dsv.bad::before{background:#f87171}
+
+body.dock .wbs{display:flex;flex:none}
+
+/* ===== Dashboard: beranda rapi (kartu dua kolom) ===== */
+#pd.on{display:flex;flex-direction:column;gap:22px;padding-bottom:90px}
+#pd .card{margin:0}
+#pd .dwel,#pd .dwide{grid-column:1/-1}
+/* beranda dipisah per bagian: Dock (Chat + Donate Dock) dan Platform (status koneksi) */
+.dsec{display:flex;flex-direction:column;gap:10px}
+.dsh{display:flex;align-items:center;gap:12px;padding:0 4px;font-size:15px;font-weight:700;color:var(--text)}
+.dsh::after{content:'';flex:1;height:1px;background:var(--line)}
+.dgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-content:start}
+@media (max-width:1000px){.dgrid{grid-template-columns:minmax(0,1fr)}}
+.dkr{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.dkr:first-of-type{border-top:0}
+.dki{display:flex;flex-direction:column;gap:3px;min-width:0}.dki b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dki small{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.dki small::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+.dki small.on::before{background:#4ade80}.dki small.lk::before{background:#fbbf24}
+.dkb{display:flex;gap:8px;flex:none}.dkb .btn{min-width:84px}
+.dkb .btn.on{background:var(--btn2);color:var(--text);border:0}
+
+/* ===== pengaturan Donate Dock (daftar dock) ===== */
+.dnc{border:1px solid var(--line);border-radius:var(--rad-c);padding:12px;margin-top:12px}
+.dnc .dnh{display:flex;gap:8px;align-items:center}.dnc .dnh input{flex:1}
+.dnc .dnh .btn{flex:none;min-width:84px}
+.dnc .g2{align-items:flex-end}
+#panel .dnc label{margin:10px 0 5px}
+.dnc .row{margin:10px 0 0}
+
+/* Donate Dock di beranda Dashboard: satu kotak per dock (ikut grid dua kolom) */
+#dDocks{display:contents}
+.dkc h3{margin:0 0 6px}.dkc .dkb{flex-wrap:wrap;margin-top:12px;justify-content:flex-end}.dkc .dkb .btn{min-width:0}
+.btn.ic{width:38px;padding:0;display:inline-flex;align-items:center;justify-content:center}.btn.ic svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#dDockHint:empty{display:none}
+.fab{position:absolute;right:22px;bottom:22px;z-index:5;width:54px;height:54px;border:0;border-radius:50%;background:var(--acc);color:var(--acc-t);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;box-shadow:0 6px 18px rgba(0,0,0,.45);transition:filter .15s,transform .15s}.fab:hover{filter:brightness(1.12);transform:scale(1.05)}
+.fab svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round}
+#dnModal .row{margin:12px 0 0}#dnModal .btns{margin-top:14px}
+
+/* status koneksi tiap platform: di dalam kartu platformnya (Sambungkan live) */
+.cst{font-size:12px;line-height:1.6;color:var(--muted);margin-top:6px}
+.cst:empty{display:none}
+.cst .sv{display:flex;align-items:center;gap:6px}
+.cst .sv::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.cst .sv.ok{color:#4ade80}.cst .sv.ok::before{background:#4ade80}
+.cst .sv.wait{color:#fbbf24}.cst .sv.wait::before{background:#fbbf24}
+.cst .sv.bad{color:#f87171}.cst .sv.bad::before{background:#f87171}
+/* beranda Dashboard dibuat ringkas: kartu dock satu baris (nama + status di kiri, tombol di kanan) */
+#pd.on{gap:14px;padding-bottom:80px}
+#pd .dkc{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:10px;row-gap:0;align-items:center;padding:9px 14px}
+#pd .dkc h3{grid-column:1;margin:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#pd .dkc .dki{grid-column:1}#pd .dkc .dki b{display:none}
+#pd .dkc .dkb{grid-column:2;grid-row:1/3;margin:0;flex-wrap:nowrap}
+.exp{font-style:normal;font-weight:600;font-size:11px;color:var(--muted);margin-left:2px;white-space:nowrap}
+
+/* v15.6.6: judul di dalam kotak aktivitas TikTok (kini kotak sendiri, bukan di dalam kotak pembungkus) */
+#pgb_dock_tt .card>.acttl:first-child,#pgb_overlay_tt .card>.acttl:first-child{margin-top:0}

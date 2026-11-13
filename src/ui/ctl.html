@@ -1,0 +1,40 @@
+<!doctype html><html lang="id"><head><meta charset="utf-8"><title>ChatStream Labs</title>
+<style>*{box-sizing:border-box;-webkit-user-select:none;user-select:none;scrollbar-width:none;outline:none!important}
+*::-webkit-scrollbar{display:none}
+html,body{margin:0;height:100%;overflow:hidden;background:transparent;font-family:'Segoe UI',system-ui,sans-serif}
+body{--eyec:#ffd166}body.prot{--eyec:#5eead4}
+#ctl{display:flex;gap:6px}
+.cb2{width:36px;height:36px;border-radius:10px;background:#12181c;border:1px solid #33414a;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;opacity:.35;transition:opacity .15s,background .15s}
+.cb2:hover{opacity:1;background:#1d2a31}
+#mover{cursor:move;touch-action:none}
+#eye .e-open{display:block}#eye .e-shut{display:none}body.prot #eye .e-open{display:none}body.prot #eye .e-shut{display:block}
+#unlock .l-shut{display:none}body.islocked #unlock .l-open{display:none}body.islocked #unlock .l-shut{display:block}
+#cclose:hover{background:#e5484d;border-color:#e5484d}
+body.busy #unlock{opacity:1;background:#1d2a31;cursor:progress}
+/* v15.6.2: kotak tombol jendela CHAT memakai ikon pin (terisi = terpin); Browser Dock juga pin (v1.0.2) */
+#unlock .pn{display:none}body.pinmode #unlock .pn{display:block}body.pinmode #unlock .l-open,body.pinmode #unlock .l-shut{display:none}body.pinmode.islocked #unlock .pn{fill:#fff}</style></head>
+<body>
+<div id="ctl"><button class="cb2" id="eye" title="Sembunyikan dari OBS"><svg class="e-open" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--eyec,#ffd166)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><svg class="e-shut" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--eyec,#5eead4)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11c2.5 4 5.5 6 9 6s6.5-2 9-6"/><path d="M12 17v3M7.5 15.5l-1.6 2.4M16.5 15.5l1.6 2.4"/><path d="M4 4l16 16"/></svg></button><button class="cb2" id="unlock" title="Buka kunci"><svg class="pn" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 3h6l-1 6 3 3v2H7v-2l3-3z"/></svg><svg class="l-open" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-1.5"/></svg><svg class="l-shut" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></button><div class="cb2" id="mover" title="Tahan lalu geser untuk memindahkan"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg></div><button class="cb2" id="cclose" title="Tutup"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+<script>
+const Q=new URLSearchParams(location.search),T=Q.get('t')||'chat',isChat=T==='chat',idb=isChat?{}:{id:T},$=id=>document.getElementById(id);
+const post=(u,b)=>fetch(u,{method:'POST',body:JSON.stringify(b||{})}).catch(()=>{});
+let lk=false;
+function setProt(on){document.body.classList.toggle('prot',!!on);$('eye').title=on?'Tersembunyi dari OBS (klik untuk menampilkan)':'Terlihat di OBS (klik untuk menyembunyikan)';}
+function setLk(l){lk=!!l;document.body.classList.toggle('islocked',lk);$('unlock').title=lk?'Lepas pin (jendela bisa digeser dan di-resize)':'Pin jendela (terkunci, klik tembus ke game)';}
+document.body.classList.toggle('pinmode',true); // v1.0.2: Browser Dock juga memakai ikon pin (sama seperti jendela chat)
+// v15.5.0: keadaan datang dari main.js (alamat halaman + window.__st saat "Sembunyikan dari OBS" diganti), tanpa polling /dash-state tiap 2 detik
+window.__st=s=>{if(s&&s.prot!==undefined)setProt(s.prot);if(s&&s.lk!==undefined)setLk(s.lk);};
+setProt(Q.get('prot')!=='0');setLk(Q.get('lk')==='1');
+const sync=()=>fetch('/dash-state').then(r=>r.json()).then(r=>{setProt(r.protect);const d=isChat?r.chat:(r.docks&&r.docks[T]);if(d)setLk(d.locked);}).catch(()=>{});
+if(Q.get('prot')===null)sync(); // dibuka tanpa parameter (mis. manual): ambil keadaan sekali saja
+const mv=$('mover');
+mv.addEventListener('pointerdown',e=>{try{mv.setPointerCapture(e.pointerId);}catch{}post('/drag',{on:true,...idb});});
+['pointerup','pointercancel','lostpointercapture'].forEach(ev=>mv.addEventListener(ev,()=>post('/drag',{on:false,...idb})));
+// v15.5.1: tombol langsung terlihat ditekan dan klik kedua diabaikan sebentar, supaya tidak menggembok-lalu-membuka lagi.
+// v15.6.2: pin chat tidak membuat jendela baru, jadi jedanya singkat (400 ms); v1.0.2: Browser Dock juga satu jendela, jedanya sama (dulu 2,5 dtk).
+let lkBusy=false;
+$('unlock').onclick=()=>{if(lkBusy)return;lkBusy=true;document.body.classList.add('busy');setTimeout(()=>{lkBusy=false;document.body.classList.remove('busy');},400);post('/lock',{on:!lk,...idb});};
+$('cclose').onclick=()=>post('/win',{which:isChat?'main':'donate:'+T,act:'close'});
+$('eye').onclick=()=>post('/protect-toggle').then(sync);
+window.__ready=true;
+</script></body></html>

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Izin minimal. Halaman aplikasi (localhost) tidak memanggil Tauri; semua jendela diatur dari Rust.",
+  "windows": ["splash"],
+  "permissions": ["core:default"]
+}

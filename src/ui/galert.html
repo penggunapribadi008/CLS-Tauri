@@ -1,0 +1,38 @@
+<!doctype html><html lang="id"><head><meta charset="utf-8"><title>ChatStream Labs</title>
+<style>*{box-sizing:border-box;-webkit-user-select:none;user-select:none;scrollbar-width:none}
+*::-webkit-scrollbar{display:none}
+html,body{margin:0;height:100%;overflow:hidden;background:transparent;font-family:'Segoe UI',system-ui,sans-serif}
+#galert{display:flex;position:fixed;inset:0;overflow:hidden;flex-direction:column;justify-content:space-between;gap:6px;padding:6px 10px;pointer-events:none}
+#gat{display:flex;flex-direction:column;gap:6px}
+body[data-side=left] #galert .ga{align-self:flex-end}
+#galert .ga{display:flex;align-items:center;gap:calc(10px*var(--gs,1));align-self:flex-start;max-width:100%;padding:calc(6px*var(--gs,1)) calc(14px*var(--gs,1)) calc(6px*var(--gs,1)) calc(8px*var(--gs,1));border-radius:calc(14px*var(--gs,1));background:rgba(15,15,22,.92);border:1px solid rgba(255,255,255,.2);color:#fff;font:600 calc(13px*var(--gs,1)) 'Segoe UI',sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.5);animation:gaIn .35s ease both}
+#galert .ga img,#galert .ga .gi{width:calc(40px*var(--gs,1));height:calc(40px*var(--gs,1));flex:none;object-fit:contain;font-size:calc(30px*var(--gs,1));line-height:calc(40px*var(--gs,1));text-align:center}
+#galert .ga .gt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#galert .ga.wrap .gt{white-space:normal;overflow-wrap:anywhere}
+#galert .ga.out{opacity:0;transform:translateY(-6px);transition:opacity .4s,transform .4s}
+@keyframes gaIn{from{opacity:0;transform:translateY(-10px) scale(.95)}to{opacity:1;transform:none}}</style></head>
+<body>
+<div id="galert"><div id="gat"></div></div>
+<script>
+const $=id=>document.getElementById(id),fmt=n=>n==null?'-':n.toLocaleString('id-ID'),ICON={gift:'\u{1F381}'};
+// v1.0.4: gambar gift TikTok kadang gagal dimuat karena formatnya (.image / .heic / .webp); coba format lain di alamat yang sama sebelum menyerah (salinan dari app.js)
+const gImgAlt=u=>{const r=/\.(image|heic|heif|webp|png|jpe?g)(?=$|\?)/i,m=r.exec(u);if(!m)return[];const e=m[1].toLowerCase();return['webp','png'].filter(x=>x!==e).map(x=>u.replace(r,'.'+x));};
+function gImgLoad(im,u,fail){const q=[u,...gImgAlt(u)];let i=0;im.onerror=()=>{if(++i<q.length)im.src=q[i];else fail();};im.src=q[0];}
+// alert hadiah saja (alert like dihapus di v15.5.5); lama tampil (dur), jumlah maksimal (max), ukuran (size, %) dan arah (order) datang dari pengaturan Dock
+function giftAlert(m){
+  if(Date.now()-(m.t||0)>8000)return;
+  if(m.kind==='like')return;const box=$('gat');if(!box)return;
+  const dur=Math.max(2,Math.min(60,Number(m.dur)||6))*1000,mx=Math.max(1,Math.min(10,Number(m.max)||3));
+  const d=document.createElement('div'),t=document.createElement('span'),b=document.createElement('b');d.className='ga';t.className='gt';
+  const fb=()=>{const e=document.createElement('span');e.className='gi';e.textContent=ICON.gift;return e;};
+  let im;if(m.img){im=document.createElement('img');im.alt='';im.referrerPolicy='no-referrer';gImgLoad(im,m.img,()=>im.replaceWith(fb()));}else im=fb();
+  b.textContent=m.name||'?';t.append(b,' mengirim '+(m.gift||'hadiah')+((m.n||1)>1?' \u00d7'+m.n:''));
+  const sz=Math.max(50,Math.min(200,Number(m.size)||100))/100;d.style.setProperty('--gs',sz);if(sz>1.05)d.classList.add('wrap');
+  d.append(im,t);if(m.order==='top'){box.prepend(d);while(box.children.length>mx)box.lastChild.remove();}else{box.appendChild(d);while(box.children.length>mx)box.firstChild.remove();}
+  setTimeout(()=>{d.classList.add('out');setTimeout(()=>d.remove(),450);},dur);}
+// main.js mengisi lewat window.__ga dan membaca area kotaknya lewat window.__garects; pratinjau di Dashboard memakai halaman YANG SAMA
+window.__ga=giftAlert;
+window.__gaside=(s,off,h)=>{document.body.dataset.side=s;const b=$('galert');b.style.top=(off||0)+'px';b.style.bottom='auto';b.style.height=(h>0?h+'px':'auto');};
+window.__garects=()=>[...document.querySelectorAll('#galert .ga')].map(e=>{const r=e.getBoundingClientRect();return{x:Math.max(0,Math.floor(r.left)-1),y:Math.max(0,Math.floor(r.top)-1),width:Math.ceil(r.width)+2,height:Math.ceil(r.height)+2};}).filter(r=>r.width>2&&r.height>2);
+addEventListener('error',e=>{try{fetch('/log',{method:'POST',body:JSON.stringify({msg:String(e&&e.message||'error')})});}catch{}});
+window.__ready=true;
+</script></body></html>
