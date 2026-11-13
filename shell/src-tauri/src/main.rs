@@ -7,6 +7,7 @@
 // ter-pin, simpan CSS, fallback Kick (netFetch), auto-update.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::Mutex;
@@ -26,7 +27,15 @@ use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 
 // ---------------------------------------------------------------- state
+struct DockSt {
+    id: String,
+    locked: bool,
+    url: String,
+}
+
 struct Shell {
+    ctrl_pos: Mutex<String>,               // posisi kotak tombol chat: top-right, bottom-left, dst.
+    docks: Mutex<HashMap<String, DockSt>>, // Browser Dock yang sedang terbuka (kunci = label jendela)
     child: Mutex<Option<CommandChild>>,
     port: AtomicU16,
     app_ready: AtomicBool, // false selama splash (tidak ada jendela aplikasi yang boleh tampil)
@@ -43,6 +52,8 @@ struct Shell {
 impl Shell {
     fn new() -> Self {
         Shell {
+            ctrl_pos: Mutex::new("top-right".to_string()),
+            docks: Mutex::new(HashMap::new()),
             child: Mutex::new(None),
             port: AtomicU16::new(0),
             app_ready: AtomicBool::new(false),
@@ -116,13 +127,26 @@ fn send(app: &AppHandle, v: Value) {
 fn push_state(app: &AppHandle, open: Option<bool>) {
     let open = open.unwrap_or_else(|| app.get_webview_window("chat").is_some());
     let locked = sh(app).locked.load(Ordering::SeqCst);
-    send(app, json!({"t":"state","dash":{"chat":{"open":open,"locked":locked},"docks":{}}}));
+    let docks: serde_json::Map<String, Value> = {
+        let s = sh(app);
+        let m = s.docks.lock().unwrap_or_else(|e| e.into_inner());
+        m.values()
+            .map(|d| (d.id.clone(), json!({"open": true, "locked": d.locked})))
+            .collect()
+    };
+    send(
+        app,
+        json!({"t":"state","dash":{"chat":{"open":open,"locked":locked},"docks":Value::Object(docks)}}),
+    );
 }
 
 fn apply_protect(app: &AppHandle) {
     let on = sh(app).protect.load(Ordering::SeqCst);
-    for (_, w) in app.webview_windows() {
+    for (label, w) in app.webview_windows() {
         let _ = w.set_content_protected(on);
+        if label.starts_with("ctl-") {
+            let _ = w.eval(&format!("window.__st&&window.__st({{prot:{}}})", on));
+        }
     }
 }
 
@@ -150,13 +174,28 @@ fn save_bounds(app: &AppHandle) {
     if !v.is_object() {
         v = json!({});
     }
-    for key in ["chat", "dash"] {
+    let mut keys: Vec<String> = vec!["chat".to_string(), "dash".to_string()];
+    for (l, _) in app.webview_windows() {
+        if l.starts_with("dock-") {
+            keys.push(l);
+        }
+    }
+    for key in keys.iter() {
+        // Browser Dock yang di-pin tidak menyimpan posisi (sama seperti versi lama)
+        let pinned = sh(app)
+            .docks
+            .lock()
+            .map(|m| m.get(key.as_str()).map(|d| d.locked).unwrap_or(false))
+            .unwrap_or(false);
+        if pinned {
+            continue;
+        }
         if let Some(w) = app.get_webview_window(key) {
             if w.is_minimized().unwrap_or(false) || w.is_maximized().unwrap_or(false) {
                 continue;
             }
             if let (Ok(p), Ok(s)) = (w.outer_position(), w.inner_size()) {
-                v[key] = json!({"x": p.x, "y": p.y, "w": s.width, "h": s.height});
+                v[key.as_str()] = json!({"x": p.x, "y": p.y, "w": s.width, "h": s.height});
             }
         }
     }
@@ -301,18 +340,27 @@ fn make_chat(app: &AppHandle) {
             if locked {
                 let _ = w.set_ignore_cursor_events(true);
             }
+            set_noactivate(&w, locked);
             let a = app.clone();
             w.on_window_event(move |ev| match ev {
                 WindowEvent::Moved(_) | WindowEvent::Resized(_) => {
                     a.state::<Shell>().bounds_dirty.store(true, Ordering::SeqCst);
+                    pos_ctl(&a, "chat");
                 }
                 WindowEvent::Destroyed => {
                     a.state::<Shell>().locked.store(false, Ordering::SeqCst);
-                    push_state(&a, Some(false));
+                    let b = a.clone();
+                    std::thread::spawn(move || {
+                        if let Some(c) = b.get_webview_window("ctl-chat") {
+                            let _ = c.destroy();
+                        }
+                        push_state(&b, Some(false));
+                    });
                 }
                 _ => {}
             });
             let _ = w.show();
+            make_ctl(app, "chat");
             push_state(app, Some(true));
         }
         Err(e) => log(app, &format!("gagal membuat jendela chat: {}", e)),
@@ -337,12 +385,15 @@ fn set_lock(app: &AppHandle, on: bool) {
     let _ = w.unminimize();
     if on {
         let _ = w.set_ignore_cursor_events(true);
+        set_noactivate(&w, true);
         let _ = w.eval("window.__pin&&window.__pin(true)");
     } else {
         let _ = w.set_ignore_cursor_events(false);
+        set_noactivate(&w, false);
         let _ = w.set_focus();
         let _ = w.eval("window.__pin&&window.__pin(false)");
     }
+    js(app, "ctl-chat", &format!("window.__st&&window.__st({{lk:{}}})", on));
     save_bounds(app);
     push_state(app, None);
 }
@@ -379,6 +430,38 @@ extern "system" {
     fn ReleaseCapture() -> i32;
     fn GetCursorPos(p: *mut Pt) -> i32;
     fn PostMessageW(hwnd: isize, msg: u32, wparam: usize, lparam: isize) -> i32;
+    fn GetWindowLongPtrW(hwnd: isize, idx: i32) -> isize;
+    fn SetWindowLongPtrW(hwnd: isize, idx: i32, val: isize) -> isize;
+}
+
+const GWL_EXSTYLE: i32 = -20;
+const GWLP_HWNDPARENT: i32 = -8; // pemilik jendela (owner): jendela milik selalu tampil di atas pemiliknya
+const WS_EX_TOOLWINDOW: isize = 0x0000_0080;
+const WS_EX_NOACTIVATE: isize = 0x0800_0000;
+
+fn hwnd_of(w: &WebviewWindow) -> Option<isize> {
+    w.hwnd().ok().map(|h| h.0 as isize)
+}
+
+// Jendela yang tidak boleh merebut fokus keyboard (pin, kotak tombol).
+fn set_noactivate(w: &WebviewWindow, on: bool) {
+    if let Some(h) = hwnd_of(w) {
+        unsafe {
+            let ex = GetWindowLongPtrW(h, GWL_EXSTYLE);
+            let n = if on { ex | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW } else { ex & !WS_EX_NOACTIVATE };
+            if n != ex {
+                SetWindowLongPtrW(h, GWL_EXSTYLE, n);
+            }
+        }
+    }
+}
+
+fn set_owner(child: &WebviewWindow, parent: &WebviewWindow) {
+    if let (Some(c), Some(p)) = (hwnd_of(child), hwnd_of(parent)) {
+        unsafe {
+            SetWindowLongPtrW(c, GWLP_HWNDPARENT, p);
+        }
+    }
 }
 
 fn start_resize(w: &WebviewWindow, ht: usize) {
@@ -391,6 +474,455 @@ fn start_resize(w: &WebviewWindow, ht: usize) {
             ReleaseCapture();
             PostMessageW(hwnd, 0x00A1, ht, lp); // 0x00A1 = WM_NCLBUTTONDOWN
         }
+    }
+}
+
+// ---------------------------------------------------------------- kotak tombol (mata, pin, pindah, tutup)
+// Jendela kecil tanpa bingkai di LUAR jendela chat (di DALAM pojok kanan atas untuk Browser Dock), memuat /?view=ctl&t=<chat|id dock>.
+// Tidak merebut fokus, jadi di atas game tetap bisa diklik. Dimiliki jendela induknya (selalu di atasnya), ikut bergerak/sembunyi/tutup.
+const CW: i32 = 162;
+const CH: i32 = 36;
+const CM: i32 = 4;
+
+fn san(id: &str) -> String {
+    id.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect()
+}
+
+fn parent_label(t: &str) -> String {
+    if t == "chat" { "chat".to_string() } else { format!("dock-{}", san(t)) }
+}
+
+fn ctl_label(t: &str) -> String {
+    format!("ctl-{}", san(t))
+}
+
+fn urlenc(s: &str) -> String {
+    let mut o = String::new();
+    for b in s.bytes() {
+        if b.is_ascii_alphanumeric() || b == b'-' || b == b'_' {
+            o.push(b as char);
+        } else {
+            o.push_str(&format!("%{:02X}", b));
+        }
+    }
+    o
+}
+
+fn js(app: &AppHandle, label: &str, code: &str) {
+    if let Some(w) = app.get_webview_window(label) {
+        let _ = w.eval(code);
+    }
+}
+
+fn lock_of(app: &AppHandle, t: &str) -> bool {
+    if t == "chat" {
+        sh(app).locked.load(Ordering::SeqCst)
+    } else {
+        sh(app)
+            .docks
+            .lock()
+            .ok()
+            .and_then(|m| m.get(&parent_label(t)).map(|d| d.locked))
+            .unwrap_or(false)
+    }
+}
+
+fn pos_ctl(app: &AppHandle, t: &str) {
+    let (Some(p), Some(c)) = (app.get_webview_window(&parent_label(t)), app.get_webview_window(&ctl_label(t))) else {
+        return;
+    };
+    let (Ok(pp), Ok(ps)) = (p.outer_position(), p.outer_size()) else { return };
+    let sf = p.scale_factor().unwrap_or(1.0);
+    let cw = (CW as f64 * sf).round() as i32;
+    let ch = (CH as f64 * sf).round() as i32;
+    let cm = (CM as f64 * sf).round() as i32;
+    let pw = ps.width as i32;
+    let ph = ps.height as i32;
+    let (mut x, mut y) = if t == "chat" {
+        let pos = sh(app).ctrl_pos.lock().map(|s| s.clone()).unwrap_or_else(|_| "top-right".to_string());
+        let top = pos.starts_with("top");
+        let x = if pos.ends_with("left") {
+            pp.x
+        } else if pos.ends_with("right") {
+            pp.x + pw - cw
+        } else {
+            pp.x + (pw - cw) / 2
+        };
+        (x, if top { pp.y - ch - cm } else { pp.y + ph + cm })
+    } else {
+        ((pp.x + pw - cw - cm).max(pp.x), pp.y + cm)
+    };
+    if let Ok(Some(m)) = p.current_monitor() {
+        let mp = m.position();
+        let ms = m.size();
+        x = x.max(mp.x).min(mp.x + ms.width as i32 - cw);
+        y = y.max(mp.y).min(mp.y + ms.height as i32 - ch);
+    }
+    let _ = c.set_position(PhysicalPosition::new(x, y));
+    let _ = c.set_size(PhysicalSize::new(cw as u32, ch as u32));
+}
+
+fn sync_ctl_vis(app: &AppHandle, t: &str) {
+    let (Some(p), Some(c)) = (app.get_webview_window(&parent_label(t)), app.get_webview_window(&ctl_label(t))) else {
+        return;
+    };
+    if p.is_visible().unwrap_or(false) && !p.is_minimized().unwrap_or(false) {
+        pos_ctl(app, t);
+        let _ = c.show();
+    } else {
+        let _ = c.hide();
+    }
+}
+
+fn make_ctl(app: &AppHandle, t: &str) {
+    let label = ctl_label(t);
+    if app.get_webview_window(&label).is_some() {
+        return;
+    }
+    let Some(parent) = app.get_webview_window(&parent_label(t)) else { return };
+    let prot = sh(app).protect.load(Ordering::SeqCst);
+    let lk = lock_of(app, t);
+    let path = format!("/?view=ctl&t={}&prot={}&lk={}", urlenc(t), if prot { 1 } else { 0 }, if lk { 1 } else { 0 });
+    let built = WebviewWindowBuilder::new(app, &label, WebviewUrl::External(page_url(app, &path)))
+        .title("ChatStream Labs - kontrol")
+        .inner_size(CW as f64, CH as f64)
+        .transparent(true)
+        .decorations(false)
+        .shadow(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .focused(false)
+        .visible(false)
+        .build();
+    match built {
+        Ok(c) => {
+            set_noactivate(&c, true);
+            set_owner(&c, &parent);
+            let _ = c.set_content_protected(prot);
+            pos_ctl(app, t);
+            sync_ctl_vis(app, t);
+        }
+        Err(e) => log(app, &format!("gagal membuat kotak tombol {}: {}", label, e)),
+    }
+}
+
+// ---------------------------------------------------------------- Browser Dock (widget donasi: alert / media share)
+// Satu jendela per dock (transparan, tanpa bingkai, selalu di atas) memuat URL widget. Pengaturan (daftar dock) dibaca dari settings.json
+// (global.donateDocks). Pin = klik tembus + tidak bisa difokus + isi tidak bisa diklik; lepas pin = bisa digeser (tombol pindah) dan di-resize (tepi).
+// Isi widget diskalakan otomatis supaya muat di jendela (zoom = min(lebar/refW, tinggi/refH)).
+// Belum ada: tombol Bisu, "Ukuran otomatis" (mengukur isi halaman), coba-muat-ulang otomatis kalau halaman gagal.
+fn don_cfg(app: &AppHandle) -> Vec<Value> {
+    read_global(app).get("donateDocks").and_then(|v| v.as_array().cloned()).unwrap_or_default()
+}
+
+fn don_find(app: &AppHandle, id: &str) -> Option<Value> {
+    don_cfg(app).into_iter().find(|d| d.get("id").and_then(|v| v.as_str()) == Some(id))
+}
+
+fn don_url(cfg: &Value) -> Result<tauri::Url, String> {
+    let raw = cfg.get("url").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if raw.is_empty() {
+        return Err("Isi URL dulu, lalu klik Simpan.".to_string());
+    }
+    match raw.parse::<tauri::Url>() {
+        Ok(u) if u.scheme() == "http" || u.scheme() == "https" => Ok(u),
+        _ => Err("URL tidak valid. Awali dengan http:// atau https://.".to_string()),
+    }
+}
+
+fn num(v: Option<&Value>) -> Option<f64> {
+    let v = v?;
+    v.as_f64().or_else(|| v.as_str().and_then(|s| s.trim().parse::<f64>().ok()))
+}
+
+fn state_get(app: &AppHandle) -> Value {
+    let v: Value = std::fs::read_to_string(bounds_path(app))
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_else(|| json!({}));
+    if v.is_object() { v } else { json!({}) }
+}
+
+fn don_locked_saved(app: &AppHandle, id: &str) -> bool {
+    state_get(app)
+        .get("donLocked")
+        .and_then(|m| m.get(id))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+}
+
+fn don_save_lock(app: &AppHandle, id: &str, on: bool) {
+    let mut v = state_get(app);
+    if !v["donLocked"].is_object() {
+        v["donLocked"] = json!({});
+    }
+    v["donLocked"][id] = json!(on);
+    let _ = std::fs::write(bounds_path(app), v.to_string());
+}
+
+fn dock_mode(w: &WebviewWindow, locked: bool) {
+    let _ = w.set_ignore_cursor_events(locked);
+    let _ = w.set_resizable(!locked);
+    set_noactivate(w, locked);
+}
+
+fn dock_is_locked(app: &AppHandle, label: &str) -> bool {
+    sh(app)
+        .docks
+        .lock()
+        .ok()
+        .and_then(|m| m.get(label).map(|d| d.locked))
+        .unwrap_or(false)
+}
+
+// Skala isi widget supaya muat di jendela.
+fn dock_fit(app: &AppHandle, id: &str) {
+    let label = parent_label(id);
+    let (Some(w), Some(cfg)) = (app.get_webview_window(&label), don_find(app, id)) else { return };
+    let sf = w.scale_factor().unwrap_or(1.0);
+    let Ok(sz) = w.inner_size() else { return };
+    let cw = sz.width as f64 / sf;
+    let ch = sz.height as f64 / sf;
+    let rw = num(cfg.get("refW")).filter(|v| *v >= 1.0).unwrap_or(1280.0);
+    let rh = num(cfg.get("refH")).filter(|v| *v >= 1.0).unwrap_or(720.0);
+    let z = if cfg.get("fit").and_then(|v| v.as_bool()) == Some(false) {
+        1.0
+    } else {
+        (cw / rw).min(ch / rh).max(0.1).min(10.0)
+    };
+    let _ = w.set_zoom(z);
+}
+
+// CSS yang disuntik ke halaman widget: latar transparan, opacity isi, isi tidak bisa diklik saat di-pin, bingkai tipis saat tidak di-pin.
+fn dock_css_js(cfg: &Value, locked: bool) -> String {
+    let op = num(cfg.get("opacity")).map(|v| v.round()).filter(|v| *v > 0.0).unwrap_or(100.0).max(10.0).min(100.0);
+    let dock_op = num(cfg.get("dockOp")).map(|v| v.round()).unwrap_or(100.0).max(0.0).min(100.0);
+    let mut css = String::from("html,body{background:transparent!important}");
+    if locked {
+        css.push_str("*{pointer-events:none!important}");
+    }
+    if op < 100.0 {
+        css.push_str(&format!("html{{opacity:{}!important}}", op / 100.0));
+    }
+    if !locked && dock_op > 0.0 {
+        css.push_str(&format!("html{{background:rgba(14,18,20,{})!important}}", dock_op / 100.0));
+    }
+    let tpl = "(function(){var s=document.getElementById('__cs_css');if(!s){s=document.createElement('style');s.id='__cs_css';(document.head||document.documentElement).appendChild(s);}s.textContent=__CSS__;var f=document.getElementById('__cs_fr');if(__FRAME__){if(!f){f=document.createElement('div');f.id='__cs_fr';f.style.cssText='position:fixed;left:0;top:0;right:0;bottom:0;pointer-events:none;box-sizing:border-box;z-index:2147483647;box-shadow:inset 0 0 0 2px rgba(255,255,255,.4)';(document.body||document.documentElement).appendChild(f);}}else if(f){f.remove();}})()";
+    tpl.replace("__CSS__", &serde_json::to_string(&css).unwrap_or_else(|_| "\"\"".to_string()))
+        .replace("__FRAME__", if locked { "false" } else { "true" })
+}
+
+fn dock_apply(app: &AppHandle, id: &str) {
+    let label = parent_label(id);
+    let locked = dock_is_locked(app, &label);
+    let Some(cfg) = don_find(app, id) else { return };
+    dock_fit(app, id);
+    js(app, &label, &dock_css_js(&cfg, locked));
+}
+
+fn make_dock(app: &AppHandle, id: &str, locked: bool) -> Result<(), String> {
+    let cfg = don_find(app, id).ok_or_else(|| "Browser Dock tidak ditemukan.".to_string())?;
+    let url = don_url(&cfg)?;
+    let label = parent_label(id);
+    if app.get_webview_window(&label).is_some() {
+        return Ok(());
+    }
+    let title = cfg.get("name").and_then(|v| v.as_str()).unwrap_or("Browser Dock").to_string();
+    let idc = id.to_string();
+    let w = WebviewWindowBuilder::new(app, &label, WebviewUrl::External(url.clone()))
+        .title(title)
+        .inner_size(420.0, 520.0)
+        .min_inner_size(160.0, 100.0)
+        .transparent(true)
+        .decorations(false)
+        .shadow(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .resizable(!locked)
+        .focused(false)
+        .visible(false)
+        .on_page_load(move |wv, p| {
+            if matches!(p.event(), tauri::webview::PageLoadEvent::Finished) {
+                let a = wv.app_handle().clone();
+                let i = idc.clone();
+                std::thread::spawn(move || dock_apply(&a, &i));
+            }
+        })
+        .build()
+        .map_err(|e| e.to_string())?;
+    if let Ok(mut m) = sh(app).docks.lock() {
+        m.insert(label.clone(), DockSt { id: id.to_string(), locked, url: url.to_string() });
+    }
+    restore_bounds(app, &w, &label);
+    let _ = w.set_content_protected(sh(app).protect.load(Ordering::SeqCst));
+    dock_mode(&w, locked);
+    let a = app.clone();
+    let i2 = id.to_string();
+    w.on_window_event(move |ev| match ev {
+        WindowEvent::Moved(_) => {
+            a.state::<Shell>().bounds_dirty.store(true, Ordering::SeqCst);
+            pos_ctl(&a, &i2);
+        }
+        WindowEvent::Resized(_) => {
+            a.state::<Shell>().bounds_dirty.store(true, Ordering::SeqCst);
+            pos_ctl(&a, &i2);
+            dock_fit(&a, &i2);
+        }
+        WindowEvent::Destroyed => {
+            let b = a.clone();
+            let i3 = i2.clone();
+            std::thread::spawn(move || {
+                if let Ok(mut m) = b.state::<Shell>().docks.lock() {
+                    m.remove(&parent_label(&i3));
+                }
+                if let Some(c) = b.get_webview_window(&ctl_label(&i3)) {
+                    let _ = c.destroy();
+                }
+                push_state(&b, None);
+            });
+        }
+        _ => {}
+    });
+    let _ = w.show();
+    make_ctl(app, id);
+    push_state(app, None);
+    Ok(())
+}
+
+// Pin / lepas pin satu dock pada jendela YANG SAMA (halaman widget tidak dimuat ulang, jadi media share tidak terputus).
+fn dock_set_lock(app: &AppHandle, id: &str, on: bool) {
+    don_save_lock(app, id, on);
+    let label = parent_label(id);
+    let Some(w) = app.get_webview_window(&label) else { return };
+    let changed = {
+        let s = sh(app);
+        let mut m = s.docks.lock().unwrap_or_else(|e| e.into_inner());
+        match m.get_mut(&label) {
+            Some(d) if d.locked != on => {
+                d.locked = on;
+                true
+            }
+            _ => false,
+        }
+    };
+    if !changed {
+        return;
+    }
+    let _ = w.unminimize();
+    dock_mode(&w, on);
+    dock_apply(app, id);
+    js(app, &ctl_label(id), &format!("window.__st&&window.__st({{lk:{}}})", on));
+    save_bounds(app);
+    push_state(app, None);
+}
+
+// Dipanggil tiap pengaturan berubah: dock yang dihapus / URL-nya kosong ditutup; nama, ukuran acuan, opacity, URL diterapkan.
+fn don_sync(app: &AppHandle) {
+    let items: Vec<(String, String, String)> = {
+        let s = sh(app);
+        let m = s.docks.lock().unwrap_or_else(|e| e.into_inner());
+        m.iter().map(|(l, d)| (l.clone(), d.id.clone(), d.url.clone())).collect()
+    };
+    for (label, id, loaded) in items {
+        let Some(w) = app.get_webview_window(&label) else { continue };
+        let cfg = don_find(app, &id);
+        let url = cfg.as_ref().and_then(|c| don_url(c).ok());
+        match (cfg, url) {
+            (Some(cfg), Some(u)) => {
+                if let Some(n) = cfg.get("name").and_then(|v| v.as_str()) {
+                    let _ = w.set_title(n);
+                }
+                if u.to_string() != loaded {
+                    if let Ok(mut m) = sh(app).docks.lock() {
+                        if let Some(d) = m.get_mut(&label) {
+                            d.url = u.to_string();
+                        }
+                    }
+                    let code = format!("location.replace({})", serde_json::to_string(u.as_str()).unwrap_or_default());
+                    let _ = w.eval(&code);
+                }
+                dock_apply(app, &id);
+            }
+            _ => {
+                let _ = w.close();
+            }
+        }
+    }
+}
+
+// act: open | close | reload | toggle. id kosong = semua dock
+fn donate_act(app: &AppHandle, act: &str, id: &str) -> Value {
+    if !sh(app).app_ready.load(Ordering::SeqCst) {
+        return json!({"ok": true});
+    }
+    if act == "toggle" {
+        let any = sh(app)
+            .docks
+            .lock()
+            .map(|m| m.keys().any(|l| app.get_webview_window(l).map(|w| w.is_visible().unwrap_or(false)).unwrap_or(false)))
+            .unwrap_or(false);
+        return donate_act(app, if any { "close" } else { "open" }, id);
+    }
+    if !["open", "close", "reload"].contains(&act) {
+        return json!({"error": "Perintah tidak dikenal."});
+    }
+    let ids: Vec<String> = if id.is_empty() {
+        don_cfg(app)
+            .iter()
+            .filter_map(|d| d.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()))
+            .collect()
+    } else {
+        vec![id.to_string()]
+    };
+    if ids.is_empty() {
+        return json!({"error": "Belum ada Browser Dock. Tambahkan dulu di menu Browser Dock."});
+    }
+    let mut err: Option<String> = None;
+    for i in ids {
+        let label = parent_label(&i);
+        let w = app.get_webview_window(&label);
+        match act {
+            "close" => {
+                if let Some(w) = w {
+                    let _ = w.close();
+                }
+            }
+            "reload" => {
+                if let Some(w) = w {
+                    match don_find(app, &i).map(|c| don_url(&c)) {
+                        Some(Ok(u)) => {
+                            let code = format!("location.replace({})", serde_json::to_string(u.as_str()).unwrap_or_default());
+                            let _ = w.eval(&code);
+                        }
+                        Some(Err(e)) => err = Some(e),
+                        None => {}
+                    }
+                } else if !id.is_empty() {
+                    err = Some("Browser Dock belum dibuka.".to_string());
+                }
+            }
+            _ => match don_find(app, &i) {
+                None => err = Some("Browser Dock tidak ditemukan.".to_string()),
+                Some(cfg) => match don_url(&cfg) {
+                    Err(e) => err = Some(e),
+                    Ok(_) => {
+                        if let Some(w) = w {
+                            if !w.is_visible().unwrap_or(false) {
+                                let _ = w.show();
+                                sync_ctl_vis(app, &i);
+                            }
+                        } else if let Err(e) = make_dock(app, &i, don_locked_saved(app, &i)) {
+                            err = Some(e);
+                        }
+                    }
+                },
+            },
+        }
+    }
+    match err {
+        Some(e) => json!({"error": e}),
+        None => json!({"ok": true}),
     }
 }
 
@@ -434,28 +966,38 @@ fn open_win(app: &AppHandle, url_s: &str, opt: &Value) {
 }
 
 fn win_ctl(app: &AppHandle, which: &str, act: &str) {
+    let dock_id = which.strip_prefix("donate:");
     let label = match which {
         "main" => "chat".to_string(),
         "dash" => "dash".to_string(),
-        o => format!("win-{}", o),
+        o => match dock_id {
+            Some(id) => parent_label(id),
+            None => format!("win-{}", o),
+        },
     };
     let Some(w) = app.get_webview_window(&label) else { return };
     match act {
         "min" => {
-            if which == "dash" || which == "main" {
+            if which == "dash" || which == "main" || dock_id.is_some() {
                 let _ = w.hide();
                 if which == "dash" {
                     schedule_suspend(app);
+                } else if which == "main" {
+                    sync_ctl_vis(app, "chat");
+                } else if let Some(id) = dock_id {
+                    sync_ctl_vis(app, id);
                 }
             } else {
                 let _ = w.minimize();
             }
         }
         "max" => {
-            if w.is_maximized().unwrap_or(false) {
-                let _ = w.unmaximize();
-            } else {
-                let _ = w.maximize();
+            if dock_id.is_none() {
+                if w.is_maximized().unwrap_or(false) {
+                    let _ = w.unmaximize();
+                } else {
+                    let _ = w.maximize();
+                }
             }
         }
         "close" => {
@@ -554,6 +1096,13 @@ fn run_action(app: &AppHandle, name: &str) {
                     let _ = w.show();
                 }
             }
+            sync_ctl_vis(app, "chat");
+        }
+        "donate" => {
+            donate_act(app, "toggle", "");
+        }
+        "donatereload" => {
+            donate_act(app, "reload", "");
         }
         "obs" => {
             let p = !sh(app).protect.load(Ordering::SeqCst);
@@ -635,13 +1184,16 @@ fn handle_hook(app: &AppHandle, name: &str, a: &[Value]) -> Value {
             let id = arg_s(1);
             if id.is_empty() || id == "chat" {
                 set_lock(app, arg_b(0));
+            } else {
+                dock_set_lock(app, &id, arg_b(0));
             }
             Value::Null
         }
         "drag" => {
             let id = arg_s(1);
-            if arg_b(0) && (id.is_empty() || id == "chat") && !sh(app).locked.load(Ordering::SeqCst) {
-                if let Some(w) = app.get_webview_window("chat") {
+            let t = if id.is_empty() { "chat".to_string() } else { id };
+            if arg_b(0) && !lock_of(app, &t) {
+                if let Some(w) = app.get_webview_window(&parent_label(&t)) {
                     let _ = w.start_dragging();
                 }
             }
@@ -649,13 +1201,29 @@ fn handle_hook(app: &AppHandle, name: &str, a: &[Value]) -> Value {
         }
         "resize" => {
             let id = arg_s(2);
-            if arg_b(0) && (id.is_empty() || id == "chat") && !sh(app).locked.load(Ordering::SeqCst) {
-                if let (Some(w), Some(ht)) = (app.get_webview_window("chat"), resize_ht(&arg_s(1))) {
+            let t = if id.is_empty() { "chat".to_string() } else { id };
+            if arg_b(0) && !lock_of(app, &t) {
+                if let (Some(w), Some(ht)) = (app.get_webview_window(&parent_label(&t)), resize_ht(&arg_s(1))) {
                     start_resize(&w, ht);
                 }
             }
             Value::Null
         }
+        "global" => {
+            let pos = a
+                .get(0)
+                .and_then(|g| g.get("ctrlPos"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("top-right")
+                .to_string();
+            if let Ok(mut g) = sh(app).ctrl_pos.lock() {
+                *g = pos;
+            }
+            pos_ctl(app, "chat");
+            don_sync(app);
+            Value::Null
+        }
+        "donate" => donate_act(app, &arg_s(0), &arg_s(1)),
         "openSettings" => {
             show_dash(app);
             Value::Null
@@ -675,7 +1243,6 @@ fn handle_hook(app: &AppHandle, name: &str, a: &[Value]) -> Value {
         "relaunch" => relaunch(app),
         "setHotkeys" => set_hotkeys(app, a.get(0).unwrap_or(&Value::Null)),
         // ---- belum tersedia di tahap ini (jawaban jujur supaya UI tidak menggantung)
-        "donate" => json!({"error": "Browser Dock belum tersedia di versi ini"}),
         "saveCss" => json!({"canceled": true}),
         "netFetch" => json!({"status": 0, "text": ""}),
         "checkUpdate" => json!("dev"),
@@ -701,7 +1268,7 @@ fn handle_line(app: &AppHandle, line: &str) {
         Some("hook") => {
             let name = v.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
             // hook yang belum dipakai dan sering dipanggil: tidak perlu thread
-            if matches!(name.as_str(), "shape" | "galert" | "chatFocus" | "global") {
+            if matches!(name.as_str(), "shape" | "galert" | "chatFocus") {
                 return;
             }
             let args = v.get("args").and_then(|a| a.as_array()).cloned().unwrap_or_default();
@@ -832,6 +1399,9 @@ fn tray_action(app: &AppHandle, id: &str) {
         "dash" | "settings" => show_dash(app),
         "chat" => open_chat(app),
         "pin" => toggle_lock(app),
+        "donate" => {
+            donate_act(app, "toggle", "");
+        }
         "report" => open_report(app),
         "quit" => ask_quit(app),
         _ => {}
@@ -844,6 +1414,7 @@ fn build_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .text("dash", "Buka Dashboard")
         .text("chat", "Buka Chat")
         .text("pin", "Pin / lepas pin jendela chat")
+        .text("donate", "Browser Dock (buka / tutup)")
         .text("report", "Laporan penonton")
         .text("settings", "Pengaturan")
         .separator()
@@ -885,6 +1456,11 @@ fn main() {
             let _ = std::fs::create_dir_all(data_dir(&h));
             let protect = read_global(&h).get("protect").and_then(|v| v.as_bool()) != Some(false);
             sh(&h).protect.store(protect, Ordering::SeqCst);
+            if let Some(p) = read_global(&h).get("ctrlPos").and_then(|v| v.as_str()) {
+                if let Ok(mut g) = sh(&h).ctrl_pos.lock() {
+                    *g = p.to_string();
+                }
+            }
             // splash: halaman splash.html lama (ditanam di exe), tidak bisa ditutup pengguna
             WebviewWindowBuilder::new(app, "splash", WebviewUrl::App("splash.html".into()))
                 .title("ChatStream Labs")

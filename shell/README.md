@@ -20,7 +20,10 @@ Folder data SAMA dengan versi Electron (`%APPDATA%\ChatStream Labs`), jadi penga
 | Jendela laporan/gaya/pratinjau, tombol min/max/tutup Dashboard, hemat RAM Dashboard | ada |
 | Server + 4 konektor + overlay OBS + ekstensi Chrome (folder tetap) | ada (kode lama) |
 | Installer "next-next" (NSIS, per pengguna) | ada |
-| **Belum:** Browser Dock, jendela tombol (mata/pin/pindah/tutup di luar jendela chat), alert hadiah TikTok | tahap 2 |
+| Jendela tombol (mata, pin, pindah, tutup) di luar jendela chat, posisinya mengikuti pengaturan "Posisi tombol" | ada (tahap 2a) |
+| Browser Dock (banyak dock, buka/tutup/muat ulang, pin, geser, ubah ukuran, skala otomatis, posisi diingat, tray + hotkey) | ada (tahap 2a) |
+| **Belum:** alert hadiah TikTok (jendela terpisah) | tahap 2b |
+| **Belum di Browser Dock:** tombol Bisu, "Ukuran otomatis", muat-ulang otomatis saat halaman gagal | tahap 2b |
 | **Belum:** area klik di dalam jendela ter-pin (bulatan chat/filter; sekarang pin = seluruh jendela tembus klik; pakai hotkey/tray) | tahap 2 |
 | **Belum:** auto-update, simpan CSS (.css), cadangan Kick lewat jaringan Chromium | tahap 2 |
 
