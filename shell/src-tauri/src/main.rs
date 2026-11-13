@@ -16,8 +16,8 @@ use serde_json::{json, Value};
 use tauri::menu::MenuBuilder;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{
-    AppHandle, Manager, PhysicalPosition, PhysicalSize, ResizeDirection, RunEvent, WebviewUrl, WebviewWindow,
-    WebviewWindowBuilder, WindowEvent,
+    AppHandle, Manager, PhysicalPosition, PhysicalSize, RunEvent, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+    WindowEvent,
 };
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
@@ -352,18 +352,46 @@ fn toggle_lock(app: &AppHandle) {
     set_lock(app, on);
 }
 
-fn resize_dir(edge: &str) -> Option<ResizeDirection> {
+// Tauri 2.12 tidak punya start_resize_dragging, jadi meniru yang dilakukan Windows sendiri saat tepi jendela ditarik:
+// kirim WM_NCLBUTTONDOWN dengan kode area tepi (HTLEFT dst). Resize berjalan oleh Windows selama tombol mouse masih ditekan.
+fn resize_ht(edge: &str) -> Option<usize> {
     Some(match edge {
-        "n" => ResizeDirection::North,
-        "s" => ResizeDirection::South,
-        "e" => ResizeDirection::East,
-        "w" => ResizeDirection::West,
-        "ne" => ResizeDirection::NorthEast,
-        "nw" => ResizeDirection::NorthWest,
-        "se" => ResizeDirection::SouthEast,
-        "sw" => ResizeDirection::SouthWest,
+        "w" => 10,  // HTLEFT
+        "e" => 11,  // HTRIGHT
+        "n" => 12,  // HTTOP
+        "nw" => 13, // HTTOPLEFT
+        "ne" => 14, // HTTOPRIGHT
+        "s" => 15,  // HTBOTTOM
+        "sw" => 16, // HTBOTTOMLEFT
+        "se" => 17, // HTBOTTOMRIGHT
         _ => return None,
     })
+}
+
+#[repr(C)]
+struct Pt {
+    x: i32,
+    y: i32,
+}
+
+#[link(name = "user32")]
+extern "system" {
+    fn ReleaseCapture() -> i32;
+    fn GetCursorPos(p: *mut Pt) -> i32;
+    fn PostMessageW(hwnd: isize, msg: u32, wparam: usize, lparam: isize) -> i32;
+}
+
+fn start_resize(w: &WebviewWindow, ht: usize) {
+    if let Ok(h) = w.hwnd() {
+        let hwnd = h.0 as isize;
+        unsafe {
+            let mut p = Pt { x: 0, y: 0 };
+            GetCursorPos(&mut p);
+            let lp = (((p.y as isize) & 0xFFFF) << 16) | ((p.x as isize) & 0xFFFF);
+            ReleaseCapture();
+            PostMessageW(hwnd, 0x00A1, ht, lp); // 0x00A1 = WM_NCLBUTTONDOWN
+        }
+    }
 }
 
 // ---------------------------------------------------------------- jendela lain (laporan, gaya, pratinjau, ...)
@@ -622,8 +650,8 @@ fn handle_hook(app: &AppHandle, name: &str, a: &[Value]) -> Value {
         "resize" => {
             let id = arg_s(2);
             if arg_b(0) && (id.is_empty() || id == "chat") && !sh(app).locked.load(Ordering::SeqCst) {
-                if let (Some(w), Some(d)) = (app.get_webview_window("chat"), resize_dir(&arg_s(1))) {
-                    let _ = w.start_resize_dragging(d);
+                if let (Some(w), Some(ht)) = (app.get_webview_window("chat"), resize_ht(&arg_s(1))) {
+                    start_resize(&w, ht);
                 }
             }
             Value::Null
