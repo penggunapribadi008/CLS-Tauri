@@ -1757,9 +1757,27 @@ fn update_flow_inner(app: &AppHandle, manual: bool, on_pct: &dyn Fn(i64)) -> Str
         Some(v) => return fail(v.get("error").and_then(|e| e.as_str()).unwrap_or("unduhan gagal")),
         None => return fail("pengunduh tidak berjalan"),
     }
-    // /P = tampilan pasif, /R = jalankan lagi setelah terpasang, /UPDATE = mode pembaruan (dikenali installer NSIS Tauri)
-    if let Err(e) = std::process::Command::new(&dest).args(["/P", "/R", "/UPDATE"]).spawn() {
-        return fail(&format!("installer tidak bisa dijalankan: {}", e));
+    // v1.1.6: pemasangan DIAM-DIAM. Versi sebelumnya memakai "/P /R /UPDATE" (dari ingatan) dan hasilnya wizard installer tetap muncul.
+    // Sekarang: cmd menunggu aplikasi ini keluar (ping ±2 dtk), menjalankan installer dengan /S (senyap, semua halaman dilewati; NSIS standar)
+    // ke folder pemasangan yang sama (/D=, harus argumen terakhir dan tanpa tanda kutip), MENUNGGU sampai selesai (start /wait), lalu membuka
+    // aplikasi lagi. Aplikasi dibuka lagi walau pemasangan gagal (versi lama tetap bisa dipakai). Jendela cmd disembunyikan.
+    let started = (|| {
+        use std::os::windows::process::CommandExt;
+        let exe = std::env::current_exe().ok()?;
+        let dir = exe.parent()?.to_path_buf();
+        let cmd = format!(
+            "/D /C \"ping -n 3 127.0.0.1 >nul & start /wait \"\" \"{}\" /S /UPDATE /D={}& start \"\" \"{}\"\"",
+            dest.display(),
+            dir.display(),
+            exe.display()
+        );
+        std::process::Command::new("cmd").raw_arg(cmd).creation_flags(0x0800_0000).spawn().ok() // 0x08000000 = CREATE_NO_WINDOW
+    })();
+    if started.is_none() {
+        // cadangan: cara lama (wizard tampil) kalau cmd tidak bisa dijalankan
+        if let Err(e) = std::process::Command::new(&dest).args(["/P", "/R", "/UPDATE"]).spawn() {
+            return fail(&format!("installer tidak bisa dijalankan: {}", e));
+        }
     }
     std::thread::sleep(Duration::from_millis(900));
     quit_app(app);

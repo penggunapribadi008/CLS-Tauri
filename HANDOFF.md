@@ -6,7 +6,7 @@
 > **Untuk pengguna:** di chat baru, unggah **zip proyek terbaru** (di dalamnya ada file ini) lalu ketik: *"Lanjutkan dari HANDOFF.md"*.
 > Kalau cuma mau tanya-tanya, mengunggah file ini saja sudah cukup.
 
-Terakhir diperbarui: 2026-11-14 · Versi aplikasi: 1.1.5
+Terakhir diperbarui: 2026-11-14 · Versi aplikasi: 1.1.6
 
 ---
 
@@ -102,7 +102,7 @@ Angka "30 MB" yang dulu tercatat HANYA proses Rust. Node cuma ±22 MB (+console)
 - "Ukuran otomatis": skrip `MEAS_JS` (di dalam `main.rs`) berjalan di halaman widget, mengukur kotak isi terlihat tiap 1 dtk, menulis hasil ke URL `#__csl=W,H`
   lewat `history.replaceState`; Rust membaca `url()` tiap 1 dtk (`dock_measure_loop`). Ukuran hanya naik. **URL dock bisa memuat kunci stream: jangan pernah dicatat ke log.**
 - Nama repo untuk auto-update diambil **saat build** dari env `GITHUB_REPOSITORY` (`option_env!`). Repo Private → API GitHub menjawab 404 → "tidak ada pembaruan".
-- Installer Tauri NSIS dijalankan saat update dengan argumen `/P /R /UPDATE` (dari ingatan; belum terbukti).
+- Update: v1.1.5 ke bawah menjalankan installer dengan `/P /R /UPDATE` (dari ingatan) dan TERBUKTI GAGAL: wizard installer tetap muncul (pengguna harus memilih uninstall/reinstall manual). v1.1.6 memakai cmd: tunggu app keluar → `start /wait installer /S /UPDATE /D=<folder lama>` → buka app lagi (app dibuka lagi walau pemasangan gagal). BELUM TERBUKTI. Perbaikan hanya berlaku untuk update DARI v1.1.6 ke atas (yang menjalankan update adalah app lama, jadi update 1.1.5→1.1.6 masih lewat wizard).
 - RAM v1.1.3: SEMUA jendela dibuat lewat `wb()` (argumen WebView2 harus identik di semua jendela, kalau tidak error 0x8007139F). `WV_LEAN` = bawaan Tauri + `--in-process-gpu` + `--renderer-process-limit=2` + `--enable-low-end-device-mode` + fitur tidak perlu dimatikan. Argumen buatan sendiri MENGGANTI bawaan Tauri, makanya bawaan disertakan ulang. Cadangan tanpa build ulang: berkas `%APPDATA%\ChatStream Labs\webview-args.txt` (isi `default` = hanya bawaan Tauri; kosong/tidak ada = set hemat). `--in-process-gpu` pada jendela transparan BELUM terbukti; kalau jendela chat/dock jadi hitam/berkedip, pakai `default`.
 - v1.1.5: (a) `lockScroll` = hook `WH_MOUSE_LL` di thread sendiri (`wheel_install`), isi callback cuma atomik; roda DITELAN kalau kursor di dalam rect chat (`chat_geom`) + chat ter-pin + pengaturan nyala; delta dikirim ke `#list` lewat `eval` (`wheel_loop`, 16 ms). Batasan: kalau jendela lain menutupi chat, roda di situ ikut tertelan (sama dengan Electron). `LOCK_SCROLL` diisi dari hook `global` dan `settings.json` saat start. (b) Scrollbar Browser Dock disembunyikan lewat CSS (`scrollbar-width:none` + `::-webkit-scrollbar`), tetap bisa di-scroll. (c) Kursor resize Browser Dock = 8 elemen `<b>` bercursor `*-resize` di dalam bingkai putih `__cs_fr` (hanya saat tidak di-pin), ukurannya sama dengan zona `grip_loop` (tepi 8 px, sudut 18 px); resize-nya sendiri tetap dari `grip_loop`. Chat TIDAK diubah (halaman chat sudah punya pegangan `rz` sendiri).
 - Dashboard dihancurkan (bukan about:blank) saat hidden >30 dtk; `show_dash` membuatnya lagi dan menunggu `dash_loaded`. Kalau tidak ada jendela web lain, proses WebView2 berhenti total (RAM diam ≈ Rust + node). `RunEvent::ExitRequested` sudah mencegah aplikasi keluar saat jendela terakhir hilang.
@@ -143,6 +143,7 @@ Angka "30 MB" yang dulu tercatat HANYA proses Rust. Node cuma ±22 MB (+console)
 7. Kalau build merah: minta **screenshot/teks error** dari langkah yang gagal; biasanya perbaikannya satu baris.
 
 ## 12. Changelog
+- **2026-11-14 (v1.1.6)** — Update otomatis dibuat senyap (`/S` lewat cmd + buka app lagi), karena cara lama memunculkan wizard. Belum diuji; hanya berlaku untuk update dari v1.1.6 ke versi berikutnya.
 - **2026-11-14 (v1.1.5)** — Permintaan pengguna: chat ter-pin bisa di-scroll dengan roda mouse tanpa bilah scroll (hook roda global), scrollbar Browser Dock dihapus, kursor berubah saat di tepi/sudut Browser Dock yang tidak di-pin. Belum dicoba di Windows; Rust belum dikompilasi.
 - **2026-11-14 (v1.1.4)** — Ikon file installer diperbaiki (`bundle.windows.nsis.installerIcon = icons/icon.ico`; tanpa ini Tauri memakai ikon bawaan NSIS). Workflow Electron `build.yml` dihapus. Argumen WebView2 yang dipakai kini dicatat di `shell-log.txt`. Hasil uji pengguna: argumen hemat aktif (GPU menyatu), total 342.7 → ±228 MB; `webview-args.txt` agresif terbaca tapi tidak menambah hemat (renderer tetap ±6), disarankan dihapus.
 - **2026-11-14 (v1.1.3)** — Hemat RAM: `wb()` + `WV_LEAN` argumen WebView2 (dengan berkas cadangan `webview-args.txt`), Dashboard dihancurkan saat disembunyikan, node `--max-old-space-size=192`. Belum diuji; ukur Task Manager sebelum/sesudah.
