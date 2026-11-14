@@ -181,13 +181,15 @@ fn wv_args(app: &AppHandle) -> &'static str {
         .get_or_init(|| {
             let custom = std::fs::read_to_string(data_dir(app).join("webview-args.txt")).unwrap_or_default();
             let c = custom.trim();
-            if c.is_empty() {
-                WV_LEAN.to_string()
+            let (src, args) = if c.is_empty() {
+                ("hemat (bawaan aplikasi)", WV_LEAN.to_string())
             } else if c.eq_ignore_ascii_case("default") {
-                WV_DEFAULT.to_string()
+                ("webview-args.txt = default", WV_DEFAULT.to_string())
             } else {
-                c.replace(['\r', '\n'], " ")
-            }
+                ("webview-args.txt (buatan sendiri)", c.replace(['\r', '\n'], " "))
+            };
+            log(app, &format!("webview: argumen {}: {}", src, args));
+            args
         })
         .as_str()
 }

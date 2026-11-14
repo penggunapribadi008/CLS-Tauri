@@ -135,7 +135,7 @@ hapus lalu "Pulihkan gaya bawaan" untuk mendapat versi terbaru.
     `scale` WAJIB ikut `--sx`. Gaya struktur std tidak kena karena rata kanannya memakai `flex-direction:row-reverse`, bukan `scale`.
 
 ## 7. Cara kerja sehari-hari
-Build installer Windows: lewat GitHub Actions (`.github/workflows/build.yml`, lihat `PANDUAN-GITHUB.md`) atau `npm run dist` di Windows.
+Build installer Windows: lewat GitHub Actions (`.github/workflows/build-tauri.yml`; workflow Electron lama sudah dihapus, lihat `PANDUAN-GITHUB.md`) atau `npm run dist` di Windows.
 Ganti nama aplikasi: `node scripts/rename.js "Nama Baru"` (nama lama dicatat di `package.json > previousNames` agar data pengguna ikut pindah).
 ```bash
 npm install

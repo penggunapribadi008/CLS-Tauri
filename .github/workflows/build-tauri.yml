@@ -1,6 +1,6 @@
 name: Build Tauri (installer ChatStream Labs)
 
-# Jalan di cabang `tauri`/`main` dan lewat tombol Run workflow. Workflow Electron lama (build.yml) tidak disentuh.
+# Jalan di cabang `tauri`/`main` dan lewat tombol Run workflow. Ini satu-satunya workflow (workflow Electron lama sudah dihapus di v1.1.4).
 # Push TAG v<versi> (contoh: git tag v1.1.2 && git push origin v1.1.2) = buat GitHub Release berisi installer + .sha256.
 # Release inilah yang dibaca auto-update di aplikasi. Repo harus PUBLIC agar aplikasi bisa membacanya tanpa login.
 on:
