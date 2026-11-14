@@ -8,6 +8,7 @@ for(const d of[app,sp]){fs.rmSync(d,{recursive:true,force:true});fs.mkdirSync(d,
 esbuild.buildSync({entryPoints:[path.join(root,'src/sidecar.js')],bundle:true,platform:'node',target:'node22',format:'cjs',outfile:path.join(app,'sidecar.js'),
   external:['bufferutil','utf-8-validate'],minifyWhitespace:true,minifySyntax:true,logLevel:'error'});
 for(const f of['index.html','ctl.html','galert.html','yt.png','tt.png','tw.png','kick.png','icon.png'])fs.copyFileSync(path.join(b,f),path.join(app,f)); // server melayani berkas-berkas ini dari folder sidecar.js
+fs.copyFileSync(path.join(root,'src/updater.js'),path.join(app,'updater.js')); // pemeriksa/pengunduh pembaruan (dijalankan node dari cangkang)
 fs.cpSync(path.join(root,'extension'),path.join(app,'extension'),{recursive:true});
 fs.copyFileSync(path.join(b,'splash.html'),path.join(sp,'splash.html'));
 for(const f of['splash-bg.webp','splash-logo.png'])fs.copyFileSync(path.join(root,'assets',f),path.join(sp,f));

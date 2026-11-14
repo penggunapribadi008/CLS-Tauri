@@ -22,10 +22,14 @@ Folder data SAMA dengan versi Electron (`%APPDATA%\ChatStream Labs`), jadi penga
 | Installer "next-next" (NSIS, per pengguna) | ada |
 | Jendela tombol (mata, pin, pindah, tutup) di luar jendela chat, posisinya mengikuti pengaturan "Posisi tombol" | ada (tahap 2a) |
 | Browser Dock (banyak dock, buka/tutup/muat ulang, pin, geser, ubah ukuran, skala otomatis, posisi diingat, tray + hotkey) | ada (tahap 2a) |
-| **Belum:** alert hadiah TikTok (jendela terpisah) | tahap 2b |
-| **Belum di Browser Dock:** tombol Bisu, "Ukuran otomatis", muat-ulang otomatis saat halaman gagal | tahap 2b |
-| **Belum:** area klik di dalam jendela ter-pin (bulatan chat/filter; sekarang pin = seluruh jendela tembus klik; pakai hotkey/tray) | tahap 2 |
-| **Belum:** auto-update, simpan CSS (.css), cadangan Kick lewat jaringan Chromium | tahap 2 |
+| Alert hadiah TikTok (jendela di samping chat, dibuat saat dibutuhkan, dilepas 45 dtk setelah selesai) | ada (tahap 2b) |
+| Klik di dalam jendela ter-pin (bulatan chat/filter, kolom ketik) | ada (tahap 2b) |
+| Auto-update dari GitHub Releases (SHA-256 wajib cocok, dialog Update Now / Later, progres di splash, tombol Cek Update) | ada (tahap 2b), repo harus PUBLIC |
+| Simpan CSS (.css) | ada (tahap 2b) |
+| **Belum:** tombol Bisu & "Ukuran otomatis" Browser Dock, muat-ulang otomatis dock yang gagal | |
+| **Belum:** kunci scroll chat saat ter-pin (lockScroll, perlu hook mouse global) | |
+| **Belum:** cadangan Kick lewat jaringan Chromium (netFetch) | |
+| **Belum:** opsi "Abaikan versi ini" pada dialog update | |
 
 ## Build
 Push ke cabang `tauri` -> Actions > "Build Tauri" -> Artifacts: installer `.exe`.

@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -34,6 +34,13 @@ struct DockSt {
 }
 
 struct Shell {
+    chat_geom: Mutex<(i32, i32, u32, u32, f64)>, // posisi/ukuran jendela chat (px fisik) + skala, untuk hover_loop
+    rects: Mutex<Vec<(f64, f64, f64, f64)>>,     // kotak yang boleh diklik di jendela ter-pin (dari hook shape)
+    ga_ok: AtomicBool,                           // halaman alert sudah dimuat
+    ga_q: Mutex<Vec<Value>>,                     // alert yang menunggu halaman dimuat
+    ga_side: Mutex<String>,                      // sisi/posisi alert terakhir yang dikirim ke halaman
+    ga_gen: AtomicU64,                           // nomor alert terakhir (untuk membatalkan timer sembunyi/lepas)
+    upd_busy: AtomicBool,
     ctrl_pos: Mutex<String>,               // posisi kotak tombol chat: top-right, bottom-left, dst.
     docks: Mutex<HashMap<String, DockSt>>, // Browser Dock yang sedang terbuka (kunci = label jendela)
     child: Mutex<Option<CommandChild>>,
@@ -52,6 +59,13 @@ struct Shell {
 impl Shell {
     fn new() -> Self {
         Shell {
+            chat_geom: Mutex::new((0, 0, 0, 0, 1.0)),
+            rects: Mutex::new(Vec::new()),
+            ga_ok: AtomicBool::new(false),
+            ga_q: Mutex::new(Vec::new()),
+            ga_side: Mutex::new(String::new()),
+            ga_gen: AtomicU64::new(0),
+            upd_busy: AtomicBool::new(false),
             ctrl_pos: Mutex::new("top-right".to_string()),
             docks: Mutex::new(HashMap::new()),
             child: Mutex::new(None),
@@ -345,7 +359,9 @@ fn make_chat(app: &AppHandle) {
             w.on_window_event(move |ev| match ev {
                 WindowEvent::Moved(_) | WindowEvent::Resized(_) => {
                     a.state::<Shell>().bounds_dirty.store(true, Ordering::SeqCst);
+                    update_geom(&a);
                     pos_ctl(&a, "chat");
+                    pos_galert(&a);
                 }
                 WindowEvent::Destroyed => {
                     a.state::<Shell>().locked.store(false, Ordering::SeqCst);
@@ -354,12 +370,16 @@ fn make_chat(app: &AppHandle) {
                         if let Some(c) = b.get_webview_window("ctl-chat") {
                             let _ = c.destroy();
                         }
+                        if let Some(g) = b.get_webview_window("galert") {
+                            let _ = g.destroy();
+                        }
                         push_state(&b, Some(false));
                     });
                 }
                 _ => {}
             });
             let _ = w.show();
+            update_geom(app);
             make_ctl(app, "chat");
             push_state(app, Some(true));
         }
@@ -571,6 +591,9 @@ fn sync_ctl_vis(app: &AppHandle, t: &str) {
         let _ = c.show();
     } else {
         let _ = c.hide();
+        if t == "chat" {
+            ga_hide(app);
+        }
     }
 }
 
@@ -926,6 +949,364 @@ fn donate_act(app: &AppHandle, act: &str, id: &str) -> Value {
     }
 }
 
+// ---------------------------------------------------------------- klik di dalam jendela chat ter-pin ("bulatan" chat/filter, kolom ketik)
+// Jendela ter-pin tembus klik. Halaman melaporkan kotak-kotak yang boleh diklik lewat hook "shape" (koordinat CSS di dalam jendela).
+// Selama kursor ada di atas salah satu kotak, jendela menerima klik; di luar itu tembus lagi. Dicek ±30x per detik.
+fn hover_loop(app: AppHandle) {
+    let mut last: Option<bool> = None;
+    loop {
+        let (locked, quitting) = {
+            let s = sh(&app);
+            (s.locked.load(Ordering::SeqCst), s.quitting.load(Ordering::SeqCst))
+        };
+        if quitting {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(if locked { 33 } else { 250 }));
+        if !locked {
+            last = None;
+            continue;
+        }
+        let Some(w) = app.get_webview_window("chat") else { continue };
+        let (gx, gy, gw, gh, sf) = sh(&app).chat_geom.lock().map(|g| *g).unwrap_or((0, 0, 0, 0, 1.0));
+        let mut p = Pt { x: 0, y: 0 };
+        unsafe {
+            GetCursorPos(&mut p);
+        }
+        let inside = gw > 0 && p.x >= gx && p.y >= gy && p.x < gx + gw as i32 && p.y < gy + gh as i32;
+        let want_ignore = if !inside {
+            true
+        } else {
+            let cx = (p.x - gx) as f64 / sf;
+            let cy = (p.y - gy) as f64 / sf;
+            let hit = sh(&app)
+                .rects
+                .lock()
+                .map(|r| r.iter().any(|q| cx >= q.0 && cx < q.0 + q.2 && cy >= q.1 && cy < q.1 + q.3))
+                .unwrap_or(false);
+            !hit
+        };
+        if last != Some(want_ignore) {
+            last = Some(want_ignore);
+            let _ = w.set_ignore_cursor_events(want_ignore);
+        }
+    }
+}
+
+fn update_geom(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("chat") {
+        if let (Ok(p), Ok(s)) = (w.outer_position(), w.outer_size()) {
+            let sf = w.scale_factor().unwrap_or(1.0);
+            if let Ok(mut g) = sh(app).chat_geom.lock() {
+                *g = (p.x, p.y, s.width, s.height, sf);
+            }
+        }
+    }
+}
+
+// Kolom ketik di jendela ter-pin: selama terbuka jendela boleh difokus (keyboard ke kolom), begitu ditutup dikembalikan (keyboard ke game).
+fn chat_focus(app: &AppHandle, on: bool) {
+    let Some(w) = app.get_webview_window("chat") else { return };
+    if on {
+        set_noactivate(&w, false);
+        let _ = w.set_focus();
+    } else if sh(app).locked.load(Ordering::SeqCst) {
+        set_noactivate(&w, true);
+    }
+}
+
+// ---------------------------------------------------------------- alert hadiah TikTok (jendela di samping jendela chat)
+// Dibuat saat alert pertama datang, disembunyikan sesudah selesai, dilepas (hemat RAM) 45 dtk kemudian. Seluruhnya tembus klik.
+const GAW: i32 = 320;
+const GAH: i32 = 600;
+const GAM: i32 = 6;
+
+fn ga_bounds(app: &AppHandle) -> Option<(i32, i32, &'static str, i32, i32)> {
+    let c = app.get_webview_window("chat")?;
+    let p = c.outer_position().ok()?;
+    let sz = c.outer_size().ok()?;
+    let sf = c.scale_factor().unwrap_or(1.0);
+    let gaw = (GAW as f64 * sf).round() as i32;
+    let gah = (GAH as f64 * sf).round() as i32;
+    let gam = (GAM as f64 * sf).round() as i32;
+    let (wx, wy, ww, wh) = (p.x, p.y, sz.width as i32, sz.height as i32);
+    let (mx, my, mw, mh) = match c.current_monitor() {
+        Ok(Some(m)) => (m.position().x, m.position().y, m.size().width as i32, m.size().height as i32),
+        _ => (0, 0, 1920, 1080),
+    };
+    let mut side = "left";
+    let mut x = wx - gaw - gam;
+    if x < mx {
+        side = "right";
+        x = wx + ww + gam;
+        if x + gaw > mx + mw {
+            if wx - mx >= mx + mw - (wx + ww) {
+                side = "left";
+                x = mx;
+            } else {
+                x = mx + mw - gaw;
+            }
+        }
+    }
+    let y = wy.max(my).min(my + mh - gah);
+    let off = (wy - y).max(0);
+    let h = wh.min(gah - off).max((60.0 * sf) as i32);
+    Some((x, y, side, off, h))
+}
+
+fn pos_galert(app: &AppHandle) {
+    let Some(g) = app.get_webview_window("galert") else { return };
+    let Some((x, y, side, off, h)) = ga_bounds(app) else { return };
+    let _ = g.set_position(PhysicalPosition::new(x, y));
+    let sf = g.scale_factor().unwrap_or(1.0);
+    let key = format!("{}|{}|{}", side, off, h);
+    let changed = {
+        let s = sh(app);
+        let mut k = s.ga_side.lock().unwrap_or_else(|e| e.into_inner());
+        if *k != key {
+            *k = key;
+            true
+        } else {
+            false
+        }
+    };
+    if changed && sh(app).ga_ok.load(Ordering::SeqCst) {
+        js(
+            app,
+            "galert",
+            &format!("window.__gaside&&window.__gaside(\"{}\",{},{})", side, (off as f64 / sf).round(), (h as f64 / sf).round()),
+        );
+    }
+}
+
+fn ga_make(app: &AppHandle) {
+    if app.get_webview_window("galert").is_some() {
+        return;
+    }
+    let Some(chat) = app.get_webview_window("chat") else { return };
+    sh(app).ga_ok.store(false, Ordering::SeqCst);
+    if let Ok(mut k) = sh(app).ga_side.lock() {
+        k.clear();
+    }
+    let built = WebviewWindowBuilder::new(app, "galert", WebviewUrl::External(page_url(app, "/?view=galert")))
+        .title("ChatStream Labs - alert")
+        .inner_size(GAW as f64, GAH as f64)
+        .transparent(true)
+        .decorations(false)
+        .shadow(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .focused(false)
+        .visible(false)
+        .on_page_load(|wv, p| {
+            if matches!(p.event(), tauri::webview::PageLoadEvent::Finished) {
+                let a = wv.app_handle().clone();
+                std::thread::spawn(move || ga_loaded(&a));
+            }
+        })
+        .build();
+    match built {
+        Ok(g) => {
+            set_noactivate(&g, true);
+            set_owner(&g, &chat);
+            let _ = g.set_ignore_cursor_events(true);
+            let _ = g.set_content_protected(sh(app).protect.load(Ordering::SeqCst));
+            pos_galert(app);
+        }
+        Err(e) => log(app, &format!("gagal membuat jendela alert: {}", e)),
+    }
+}
+
+fn ga_loaded(app: &AppHandle) {
+    sh(app).ga_ok.store(true, Ordering::SeqCst);
+    if let Ok(mut k) = sh(app).ga_side.lock() {
+        k.clear();
+    }
+    pos_galert(app);
+    let q: Vec<Value> = sh(app).ga_q.lock().map(|mut q| q.drain(..).collect()).unwrap_or_default();
+    for m in q {
+        ga_show(app, &m);
+    }
+}
+
+fn ga_hide(app: &AppHandle) {
+    sh(app).ga_gen.fetch_add(1, Ordering::SeqCst);
+    if let Some(g) = app.get_webview_window("galert") {
+        let _ = g.hide();
+    }
+}
+
+fn ga_show(app: &AppHandle, m: &Value) {
+    let Some(g) = app.get_webview_window("galert") else { return };
+    pos_galert(app);
+    let _ = g.show();
+    js(app, "galert", &format!("window.__ga&&window.__ga({})", m));
+    let gen = sh(app).ga_gen.fetch_add(1, Ordering::SeqCst) + 1;
+    let dur = num(m.get("dur")).filter(|d| *d > 0.0).unwrap_or(6.0);
+    let a = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis((dur * 1000.0) as u64 + 1500));
+        if a.state::<Shell>().ga_gen.load(Ordering::SeqCst) != gen {
+            return; // ada alert yang lebih baru
+        }
+        if let Some(g) = a.get_webview_window("galert") {
+            let _ = g.hide();
+        }
+        std::thread::sleep(Duration::from_secs(45));
+        if a.state::<Shell>().ga_gen.load(Ordering::SeqCst) == gen {
+            if let Some(g) = a.get_webview_window("galert") {
+                let _ = g.destroy();
+            }
+        }
+    });
+}
+
+// Dipanggil server tiap ada hadiah TikTok yang lolos pengaturan dock; hanya tampil kalau jendela chat sedang terlihat.
+fn galert_push(app: &AppHandle, m: &Value) {
+    let Some(c) = app.get_webview_window("chat") else { return };
+    if !c.is_visible().unwrap_or(false) || c.is_minimized().unwrap_or(false) {
+        return;
+    }
+    if app.get_webview_window("galert").is_none() {
+        ga_make(app);
+    }
+    if !sh(app).ga_ok.load(Ordering::SeqCst) {
+        if let Ok(mut q) = sh(app).ga_q.lock() {
+            q.push(m.clone());
+            if q.len() > 5 {
+                q.remove(0);
+            }
+        }
+        return;
+    }
+    ga_show(app, m);
+}
+
+// ---------------------------------------------------------------- simpan CSS (dialog Simpan sebagai)
+fn save_css(app: &AppHandle, name: &str, css: &str) -> Value {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let fname = format!("{}.css", name);
+    app.dialog()
+        .file()
+        .set_title("Ekspor gaya (.css)")
+        .set_file_name(&fname)
+        .add_filter("CSS", &["css"])
+        .save_file(move |p| {
+            let _ = tx.send(p);
+        });
+    match rx.recv_timeout(Duration::from_secs(600)) {
+        Ok(Some(fp)) => match fp.into_path() {
+            Ok(path) => match std::fs::write(&path, css) {
+                Ok(_) => json!({"ok": true, "path": path.to_string_lossy()}),
+                Err(e) => json!({"error": e.to_string()}),
+            },
+            Err(e) => json!({"error": e.to_string()}),
+        },
+        _ => json!({"canceled": true}),
+    }
+}
+
+// ---------------------------------------------------------------- pembaruan otomatis (GitHub Releases, repo harus PUBLIC)
+// Memeriksa/mengunduh lewat src/updater.js (node terpisah, SHA-256 wajib cocok), lalu menjalankan installer baru dan keluar.
+// Nama repo diambil saat build dari GITHUB_REPOSITORY (otomatis di GitHub Actions); kosong = pembaruan nonaktif.
+const REPO: &str = match option_env!("GITHUB_REPOSITORY") {
+    Some(r) => r,
+    None => "",
+};
+
+fn node_run(app: &AppHandle, args: Vec<String>, mut on: impl FnMut(&Value)) -> Option<Value> {
+    let (mut rx, _child) = app.shell().sidecar("node").ok()?.args(args).spawn().ok()?;
+    let mut last: Option<Value> = None;
+    tauri::async_runtime::block_on(async {
+        while let Some(ev) = rx.recv().await {
+            match ev {
+                CommandEvent::Stdout(b) => {
+                    let line = String::from_utf8_lossy(&b).trim().to_string();
+                    if let Ok(v) = serde_json::from_str::<Value>(&line) {
+                        on(&v);
+                        last = Some(v);
+                    }
+                }
+                CommandEvent::Terminated(_) => break,
+                _ => {}
+            }
+        }
+    });
+    last
+}
+
+fn update_flow(app: &AppHandle, manual: bool, on_pct: &dyn Fn(i64)) -> String {
+    if REPO.is_empty() {
+        return if manual { "dev".to_string() } else { "none".to_string() };
+    }
+    if sh(app).upd_busy.swap(true, Ordering::SeqCst) {
+        return if manual { "busy".to_string() } else { "none".to_string() };
+    }
+    let r = update_flow_inner(app, manual, on_pct);
+    sh(app).upd_busy.store(false, Ordering::SeqCst);
+    r
+}
+
+fn update_flow_inner(app: &AppHandle, manual: bool, on_pct: &dyn Fn(i64)) -> String {
+    let fail = |msg: &str| -> String {
+        log(app, &format!("update: {}", msg));
+        if manual {
+            app.dialog().message(format!("Pembaruan gagal: {}", msg)).title("Update").blocking_show();
+            "error".to_string()
+        } else {
+            "none".to_string()
+        }
+    };
+    let res = match app.path().resource_dir() {
+        Ok(r) => dunce::simplified(&r).to_path_buf(),
+        Err(e) => return fail(&e.to_string()),
+    };
+    let script = res.join("app").join("updater.js").to_string_lossy().to_string();
+    let ver = env!("CARGO_PKG_VERSION");
+    let Some(c) = node_run(app, vec![script.clone(), "check".into(), REPO.into(), ver.into()], |_| {}) else {
+        return fail("pemeriksa tidak berjalan");
+    };
+    match c.get("status").and_then(|s| s.as_str()) {
+        Some("available") => {}
+        Some("none") => return "none".to_string(),
+        _ => return fail(c.get("error").and_then(|e| e.as_str()).unwrap_or("tidak bisa memeriksa")),
+    }
+    let nv = c.get("version").and_then(|v| v.as_str()).unwrap_or("?").to_string();
+    let yes = app
+        .dialog()
+        .message(format!("Versi baru v{} tersedia.\n\nKamu memakai v{}.", nv, ver))
+        .title("Update")
+        .buttons(MessageDialogButtons::OkCancelCustom("Update Now".into(), "Later".into()))
+        .blocking_show();
+    if !yes {
+        return "later".to_string();
+    }
+    let dest = std::env::temp_dir().join("ChatStreamLabs-update-setup.exe");
+    on_pct(0);
+    let r = node_run(
+        app,
+        vec![script, "download".into(), REPO.into(), dest.to_string_lossy().to_string()],
+        |v| {
+            if let Some(p) = v.get("p").and_then(|p| p.as_i64()) {
+                on_pct(p);
+            }
+        },
+    );
+    match r {
+        Some(v) if v.get("status").and_then(|s| s.as_str()) == Some("done") => {}
+        Some(v) => return fail(v.get("error").and_then(|e| e.as_str()).unwrap_or("unduhan gagal")),
+        None => return fail("pengunduh tidak berjalan"),
+    }
+    // /P = tampilan pasif, /R = jalankan lagi setelah terpasang, /UPDATE = mode pembaruan (dikenali installer NSIS Tauri)
+    if let Err(e) = std::process::Command::new(&dest).args(["/P", "/R", "/UPDATE"]).spawn() {
+        return fail(&format!("installer tidak bisa dijalankan: {}", e));
+    }
+    std::thread::sleep(Duration::from_millis(900));
+    quit_app(app);
+    "installing".to_string()
+}
+
 // ---------------------------------------------------------------- jendela lain (laporan, gaya, pratinjau, ...)
 fn open_win(app: &AppHandle, url_s: &str, opt: &Value) {
     let is_prev = url_s.contains("preview=1");
@@ -1224,6 +1605,16 @@ fn handle_hook(app: &AppHandle, name: &str, a: &[Value]) -> Value {
             Value::Null
         }
         "donate" => donate_act(app, &arg_s(0), &arg_s(1)),
+        "chatFocus" => {
+            chat_focus(app, arg_b(0));
+            Value::Null
+        }
+        "galert" => {
+            galert_push(app, a.get(0).unwrap_or(&Value::Null));
+            Value::Null
+        }
+        "saveCss" => save_css(app, &arg_s(0), &arg_s(1)),
+        "checkUpdate" => json!(update_flow(app, true, &|_| {})),
         "openSettings" => {
             show_dash(app);
             Value::Null
@@ -1243,10 +1634,8 @@ fn handle_hook(app: &AppHandle, name: &str, a: &[Value]) -> Value {
         "relaunch" => relaunch(app),
         "setHotkeys" => set_hotkeys(app, a.get(0).unwrap_or(&Value::Null)),
         // ---- belum tersedia di tahap ini (jawaban jujur supaya UI tidak menggantung)
-        "saveCss" => json!({"canceled": true}),
         "netFetch" => json!({"status": 0, "text": ""}),
-        "checkUpdate" => json!("dev"),
-        _ => Value::Null, // shape, galert, chatFocus, global: belum ada
+        _ => Value::Null, // shape (disimpan di handle_line) dan hook lain yang tidak perlu jawaban
     }
 }
 
@@ -1267,8 +1656,24 @@ fn handle_line(app: &AppHandle, line: &str) {
         }
         Some("hook") => {
             let name = v.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
-            // hook yang belum dipakai dan sering dipanggil: tidak perlu thread
-            if matches!(name.as_str(), "shape" | "galert" | "chatFocus") {
+            // shape sering dipanggil dan murah: disimpan langsung tanpa thread
+            if name == "shape" {
+                if let Some(arr) = v.get("args").and_then(|a| a.get(0)).and_then(|r| r.as_array()) {
+                    let rects: Vec<(f64, f64, f64, f64)> = arr
+                        .iter()
+                        .filter_map(|q| {
+                            Some((
+                                q.get("x")?.as_f64()?,
+                                q.get("y")?.as_f64()?,
+                                q.get("width")?.as_f64()?,
+                                q.get("height")?.as_f64()?,
+                            ))
+                        })
+                        .collect();
+                    if let Ok(mut g) = sh(app).rects.lock() {
+                        *g = rects;
+                    }
+                }
                 return;
             }
             let args = v.get("args").and_then(|a| a.as_array()).cloned().unwrap_or_default();
@@ -1358,6 +1763,21 @@ fn startup(app: AppHandle) {
         std::thread::sleep(Duration::from_millis(100));
     }
     let splash = app.get_webview_window("splash");
+    // cek pembaruan (hanya kalau repo diketahui saat build); kalau ada dan dipasang, aplikasi keluar dan installer mengambil alih
+    if !REPO.is_empty() {
+        let sp = splash.clone();
+        let st = update_flow(&app, false, &|p| {
+            if let Some(s) = &sp {
+                let _ = s.eval(&format!("window.updProgress&&window.updProgress({})", p));
+                if p >= 100 {
+                    let _ = s.eval("window.updInstall&&window.updInstall()");
+                }
+            }
+        });
+        if st == "installing" {
+            return;
+        }
+    }
     if let Some(s) = &splash {
         let _ = s.eval("window.toConnect&&window.toConnect()");
     }
@@ -1384,6 +1804,9 @@ fn startup(app: AppHandle) {
     sh(&app).app_ready.store(true, Ordering::SeqCst);
     show_dash(&app);
     push_state(&app, None);
+    // klik di dalam jendela chat ter-pin (lihat hover_loop)
+    let hv = app.clone();
+    std::thread::spawn(move || hover_loop(hv));
     // simpan posisi jendela tiap ada perubahan (maks sekali per 2 dtk)
     loop {
         std::thread::sleep(Duration::from_secs(2));
