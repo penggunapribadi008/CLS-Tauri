@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU16, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -954,7 +954,7 @@ fn dock_fit(app: &AppHandle, id: &str) {
 fn dock_css_js(cfg: &Value, locked: bool) -> String {
     let op = num(cfg.get("opacity")).map(|v| v.round()).filter(|v| *v > 0.0).unwrap_or(100.0).max(10.0).min(100.0);
     let dock_op = num(cfg.get("dockOp")).map(|v| v.round()).unwrap_or(100.0).max(0.0).min(100.0);
-    let mut css = String::from("html,body{background:transparent!important}");
+    let mut css = String::from("html,body{background:transparent!important}*{scrollbar-width:none!important}*::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}");
     if locked {
         css.push_str("*{pointer-events:none!important}");
     }
@@ -964,7 +964,7 @@ fn dock_css_js(cfg: &Value, locked: bool) -> String {
     if !locked && dock_op > 0.0 {
         css.push_str(&format!("html{{background:rgba(14,18,20,{})!important}}", dock_op / 100.0));
     }
-    let tpl = "(function(){var s=document.getElementById('__cs_css');if(!s){s=document.createElement('style');s.id='__cs_css';(document.head||document.documentElement).appendChild(s);}s.textContent=__CSS__;var f=document.getElementById('__cs_fr');if(__FRAME__){if(!f){f=document.createElement('div');f.id='__cs_fr';f.style.cssText='position:fixed;left:0;top:0;right:0;bottom:0;pointer-events:none;box-sizing:border-box;z-index:2147483647;box-shadow:inset 0 0 0 2px rgba(255,255,255,.4)';var q=[['left:0;top:0;border-left:3px solid #fff;border-top:3px solid #fff'],['right:0;top:0;border-right:3px solid #fff;border-top:3px solid #fff'],['left:0;bottom:0;border-left:3px solid #fff;border-bottom:3px solid #fff'],['right:0;bottom:0;border-right:3px solid #fff;border-bottom:3px solid #fff']];for(var i=0;i<4;i++){var k=document.createElement('i');k.style.cssText='position:absolute;width:16px;height:16px;box-sizing:border-box;'+q[i][0];f.appendChild(k);}(document.body||document.documentElement).appendChild(f);}}else if(f){f.remove();}})()";
+    let tpl = "(function(){var s=document.getElementById('__cs_css');if(!s){s=document.createElement('style');s.id='__cs_css';(document.head||document.documentElement).appendChild(s);}s.textContent=__CSS__;var f=document.getElementById('__cs_fr');if(__FRAME__){if(!f){f=document.createElement('div');f.id='__cs_fr';f.style.cssText='position:fixed;left:0;top:0;right:0;bottom:0;pointer-events:none;box-sizing:border-box;z-index:2147483647;box-shadow:inset 0 0 0 2px rgba(255,255,255,.4)';var q=[['left:0;top:0;border-left:3px solid #fff;border-top:3px solid #fff'],['right:0;top:0;border-right:3px solid #fff;border-top:3px solid #fff'],['left:0;bottom:0;border-left:3px solid #fff;border-bottom:3px solid #fff'],['right:0;bottom:0;border-right:3px solid #fff;border-bottom:3px solid #fff']];for(var i=0;i<4;i++){var k=document.createElement('i');k.style.cssText='position:absolute;width:16px;height:16px;box-sizing:border-box;'+q[i][0];f.appendChild(k);}var g=['left:0;top:0;width:18px;height:18px;cursor:nwse-resize','right:0;top:0;width:18px;height:18px;cursor:nesw-resize','left:0;bottom:0;width:18px;height:18px;cursor:nesw-resize','right:0;bottom:0;width:18px;height:18px;cursor:nwse-resize','left:0;top:18px;bottom:18px;width:8px;cursor:ew-resize','right:0;top:18px;bottom:18px;width:8px;cursor:ew-resize','left:18px;right:18px;top:0;height:8px;cursor:ns-resize','left:18px;right:18px;bottom:0;height:8px;cursor:ns-resize'];for(var j=0;j<8;j++){var z=document.createElement('b');z.style.cssText='position:absolute;pointer-events:auto;'+g[j].replace(/cursor:([a-z-]+)/,'cursor:$1!important');f.appendChild(z);}(document.body||document.documentElement).appendChild(f);}}else if(f){f.remove();}})()";
     tpl.replace("__CSS__", &serde_json::to_string(&css).unwrap_or_else(|_| "\"\"".to_string()))
         .replace("__FRAME__", if locked { "false" } else { "true" })
 }
@@ -1282,6 +1282,102 @@ fn donate_act(app: &AppHandle, act: &str, id: &str) -> Value {
 // ---------------------------------------------------------------- klik di dalam jendela chat ter-pin ("bulatan" chat/filter, kolom ketik)
 // Jendela ter-pin tembus klik. Halaman melaporkan kotak-kotak yang boleh diklik lewat hook "shape" (koordinat CSS di dalam jendela).
 // Selama kursor ada di atas salah satu kotak, jendela menerima klik; di luar itu tembus lagi. Dicek ±30x per detik.
+// ---------------------------------------------------------------- roda mouse global (chat ter-pin bisa di-scroll tanpa menyentuh bilah scroll)
+// Jendela chat yang di-pin tembus klik, jadi roda mouse tidak sampai ke halamannya. Seperti versi Electron (hook WH_MOUSE_LL), sebuah hook mouse
+// tingkat rendah memantau roda: kalau kursor ada di dalam jendela chat yang ter-pin dan pengaturan "Chat bisa di-scroll saat terkunci" nyala,
+// roda DITELAN (aplikasi/game di belakang tidak ikut ter-scroll) dan deltanya dikirim ke halaman chat (#list). Klik tetap tembus seperti biasa.
+// Hook dipasang sekali, di thread sendiri dengan message loop; isi callback hanya membaca variabel atomik (cepat, tidak memperlambat mouse).
+static WHEEL_ON: AtomicBool = AtomicBool::new(false);
+static WHEEL_ACC: AtomicI32 = AtomicI32::new(0);
+static WHEEL_L: AtomicI32 = AtomicI32::new(0);
+static WHEEL_T: AtomicI32 = AtomicI32::new(0);
+static WHEEL_R: AtomicI32 = AtomicI32::new(0);
+static WHEEL_B: AtomicI32 = AtomicI32::new(0);
+static LOCK_SCROLL: AtomicBool = AtomicBool::new(false);
+static WHEEL_HOOK: std::sync::Once = std::sync::Once::new();
+
+#[repr(C)]
+struct MsLl {
+    x: i32,
+    y: i32,
+    data: u32,
+    flags: u32,
+    time: u32,
+    extra: usize,
+}
+
+extern "system" {
+    fn SetWindowsHookExW(id: i32, f: unsafe extern "system" fn(i32, usize, isize) -> isize, hmod: isize, tid: u32) -> isize;
+    fn CallNextHookEx(hook: isize, code: i32, w: usize, l: isize) -> isize;
+    fn GetMessageW(msg: *mut u64, hwnd: isize, min: u32, max: u32) -> i32;
+    fn GetModuleHandleW(name: *const u16) -> isize;
+}
+
+unsafe extern "system" fn wheel_hook(code: i32, w: usize, l: isize) -> isize {
+    if code >= 0 && w == 0x020A && WHEEL_ON.load(Ordering::Relaxed) {
+        // 0x020A = WM_MOUSEWHEEL
+        let m = &*(l as *const MsLl);
+        if m.x >= WHEEL_L.load(Ordering::Relaxed)
+            && m.x < WHEEL_R.load(Ordering::Relaxed)
+            && m.y >= WHEEL_T.load(Ordering::Relaxed)
+            && m.y < WHEEL_B.load(Ordering::Relaxed)
+        {
+            WHEEL_ACC.fetch_add((m.data >> 16) as i16 as i32, Ordering::Relaxed);
+            return 1; // telan roda: tidak diteruskan ke jendela di belakang
+        }
+    }
+    CallNextHookEx(0, code, w, l)
+}
+
+fn wheel_install() {
+    WHEEL_HOOK.call_once(|| {
+        std::thread::spawn(|| unsafe {
+            let hm = GetModuleHandleW(std::ptr::null());
+            if SetWindowsHookExW(14, wheel_hook, hm, 0) == 0 {
+                return; // 14 = WH_MOUSE_LL; gagal = chat tetap bisa di-scroll lewat bilah scroll cadangan
+            }
+            let mut msg = [0u64; 8]; // cukup untuk struct MSG (48 byte)
+            while GetMessageW(msg.as_mut_ptr(), 0, 0, 0) > 0 {}
+        });
+    });
+}
+
+fn wheel_loop(app: AppHandle) {
+    let mut tick: u32 = 0;
+    loop {
+        std::thread::sleep(Duration::from_millis(16));
+        if sh(&app).quitting.load(Ordering::SeqCst) {
+            break;
+        }
+        tick = tick.wrapping_add(1);
+        if tick % 8 == 1 {
+            let want = sh(&app).locked.load(Ordering::SeqCst)
+                && LOCK_SCROLL.load(Ordering::Relaxed)
+                && app.get_webview_window("chat").map(|w| w.is_visible().unwrap_or(false)).unwrap_or(false);
+            let (gx, gy, gw, gh, _) = sh(&app).chat_geom.lock().map(|g| *g).unwrap_or((0, 0, 0, 0, 1.0));
+            if want && gw > 0 && gh > 0 {
+                WHEEL_L.store(gx, Ordering::Relaxed);
+                WHEEL_T.store(gy, Ordering::Relaxed);
+                WHEEL_R.store(gx + gw as i32, Ordering::Relaxed);
+                WHEEL_B.store(gy + gh as i32, Ordering::Relaxed);
+                wheel_install();
+                WHEEL_ON.store(true, Ordering::Relaxed);
+            } else if WHEEL_ON.swap(false, Ordering::Relaxed) {
+                WHEEL_ACC.store(0, Ordering::Relaxed);
+            }
+        }
+        let d = WHEEL_ACC.swap(0, Ordering::Relaxed);
+        if d != 0 && WHEEL_ON.load(Ordering::Relaxed) {
+            // roda ke atas (delta positif) = isi bergeser turun = scrollTop berkurang. 120 unit per klik roda ≈ 100 px.
+            js(
+                &app,
+                "chat",
+                &format!("(function(){{var l=document.getElementById('list');if(l)l.scrollTop-={};}})()", (d as f64) * 0.85),
+            );
+        }
+    }
+}
+
 fn hover_loop(app: AppHandle) {
     let mut last: Option<bool> = None;
     loop {
@@ -1961,6 +2057,10 @@ fn handle_hook(app: &AppHandle, name: &str, a: &[Value]) -> Value {
             if let Ok(mut g) = sh(app).ctrl_pos.lock() {
                 *g = pos;
             }
+            LOCK_SCROLL.store(
+                a.get(0).and_then(|g| g.get("lockScroll")).and_then(|v| v.as_bool()) == Some(true),
+                Ordering::Relaxed,
+            );
             pos_ctl(app, "chat");
             don_sync(app);
             Value::Null
@@ -2168,6 +2268,8 @@ fn startup(app: AppHandle) {
     push_state(&app, None);
     // klik di dalam jendela chat ter-pin (lihat hover_loop)
     let hv = app.clone();
+    let wl = app.clone();
+    std::thread::spawn(move || wheel_loop(wl));
     std::thread::spawn(move || hover_loop(hv));
     let gp = app.clone();
     std::thread::spawn(move || grip_loop(gp));
@@ -2243,6 +2345,7 @@ fn main() {
             let _ = std::fs::create_dir_all(data_dir(&h));
             let protect = read_global(&h).get("protect").and_then(|v| v.as_bool()) != Some(false);
             sh(&h).protect.store(protect, Ordering::SeqCst);
+            LOCK_SCROLL.store(read_global(&h).get("lockScroll").and_then(|v| v.as_bool()) == Some(true), Ordering::Relaxed);
             if let Some(p) = read_global(&h).get("ctrlPos").and_then(|v| v.as_str()) {
                 if let Ok(mut g) = sh(&h).ctrl_pos.lock() {
                     *g = p.to_string();
