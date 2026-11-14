@@ -167,6 +167,35 @@ fn apply_protect(app: &AppHandle) {
     }
 }
 
+// ---------------------------------------------------------------- hemat RAM: argumen WebView2 + pembuat jendela
+// SEMUA jendela harus memakai argumen yang SAMA (kalau berbeda, WebView2 gagal berbagi satu lingkungan: error 0x8007139F), jadi semua
+// jendela dibuat lewat wb(). Bawaan Tauri (msWebOOUI, msPdfOOUI, msSmartScreenProtection) tetap disertakan karena argumen buatan sendiri MENGGANTI bawaan.
+// Cadangan tanpa build ulang: buat berkas  %APPDATA%\ChatStream Labs\webview-args.txt  berisi argumen sendiri; isi "default" = hanya bawaan Tauri
+// (kalau ada yang rusak/patah-patah); hapus berkasnya = pakai set hemat di bawah. Perubahan berlaku setelah aplikasi dibuka ulang.
+const WV_DEFAULT: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection";
+const WV_LEAN: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,Translate,OptimizationHints,MediaRouter,AutofillServerCommunication,site-per-process,IsolateOrigins --in-process-gpu --renderer-process-limit=2 --enable-low-end-device-mode --disable-background-networking --disable-component-update --no-pings";
+static WV_ARGS: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+fn wv_args(app: &AppHandle) -> &'static str {
+    WV_ARGS
+        .get_or_init(|| {
+            let custom = std::fs::read_to_string(data_dir(app).join("webview-args.txt")).unwrap_or_default();
+            let c = custom.trim();
+            if c.is_empty() {
+                WV_LEAN.to_string()
+            } else if c.eq_ignore_ascii_case("default") {
+                WV_DEFAULT.to_string()
+            } else {
+                c.replace(['\r', '\n'], " ")
+            }
+        })
+        .as_str()
+}
+
+fn wb<'a>(app: &'a AppHandle, label: &str, url: WebviewUrl) -> WebviewWindowBuilder<'a, tauri::Wry, AppHandle> {
+    WebviewWindowBuilder::new(app, label.to_string(), url).additional_browser_args(wv_args(app))
+}
+
 // ---------------------------------------------------------------- posisi jendela
 fn bounds_path(app: &AppHandle) -> PathBuf {
     data_dir(app).join("shell-state.json")
@@ -242,7 +271,7 @@ fn restore_bounds(app: &AppHandle, w: &WebviewWindow, key: &str) {
 
 // ---------------------------------------------------------------- Dashboard
 fn make_dash(app: &AppHandle) -> tauri::Result<WebviewWindow> {
-    let w = WebviewWindowBuilder::new(app, "dash", WebviewUrl::External(page_url(app, "/?view=dashboard")))
+    let w = wb(app, "dash", WebviewUrl::External(page_url(app, "/?view=dashboard")))
         .title("ChatStream Labs - Dashboard")
         .inner_size(1100.0, 700.0)
         .min_inner_size(860.0, 540.0)
@@ -278,17 +307,28 @@ fn show_dash(app: &AppHandle) {
     if !sh(app).app_ready.load(Ordering::SeqCst) {
         return;
     }
-    if let Some(w) = app.get_webview_window("dash") {
-        if sh(app).dash_suspended.swap(false, Ordering::SeqCst) {
-            let _ = w.eval(&format!("location.replace('{}')", page_url(app, "/?view=dashboard")));
+    if app.get_webview_window("dash").is_none() {
+        // Dashboard sudah dihancurkan untuk hemat RAM (lihat schedule_suspend): buat lagi, tunggu halamannya selesai dimuat agar tidak berkedip kosong
+        sh(app).dash_loaded.store(false, Ordering::SeqCst);
+        if let Err(e) = make_dash(app) {
+            log(app, &format!("gagal membuat ulang Dashboard: {}", e));
+            return;
         }
+        let t0 = Instant::now();
+        while !sh(app).dash_loaded.load(Ordering::SeqCst) && t0.elapsed() < Duration::from_secs(8) {
+            std::thread::sleep(Duration::from_millis(80));
+        }
+    }
+    sh(app).dash_suspended.store(false, Ordering::SeqCst);
+    if let Some(w) = app.get_webview_window("dash") {
         let _ = w.unminimize();
         let _ = w.show();
         let _ = w.set_focus();
     }
 }
 
-// Hemat RAM: Dashboard yang disembunyikan ke tray > 30 dtk dikosongkan halamannya, dimuat lagi saat dibuka (seperti versi Electron).
+// Hemat RAM: Dashboard yang disembunyikan ke tray > 30 dtk DIHANCURKAN (bukan sekadar dikosongkan), dibuat lagi saat dibuka.
+// Kalau tidak ada jendela web lain yang terbuka, semua proses WebView2 ikut berhenti: RAM diam turun ke Rust + node saja.
 fn schedule_suspend(app: &AppHandle) {
     let a = app.clone();
     std::thread::spawn(move || {
@@ -297,7 +337,8 @@ fn schedule_suspend(app: &AppHandle) {
             let s = a.state::<Shell>();
             if !w.is_visible().unwrap_or(true) && !s.quitting.load(Ordering::SeqCst) {
                 s.dash_suspended.store(true, Ordering::SeqCst);
-                let _ = w.eval("location.replace('about:blank')");
+                save_bounds(&a); // simpan posisi/ukuran sebelum dihancurkan
+                let _ = w.destroy();
             }
         }
     });
@@ -337,7 +378,7 @@ fn open_chat(app: &AppHandle) {
 fn make_chat(app: &AppHandle) {
     let locked = sh(app).locked.load(Ordering::SeqCst);
     let path = format!("/?view=dock&locked=1{}", if locked { "&pin=1" } else { "" });
-    let built = WebviewWindowBuilder::new(app, "chat", WebviewUrl::External(page_url(app, &path)))
+    let built = wb(app, "chat", WebviewUrl::External(page_url(app, &path)))
         .title("ChatStream Labs")
         .inner_size(460.0, 800.0)
         .min_inner_size(300.0, 300.0)
@@ -784,7 +825,7 @@ fn make_ctl(app: &AppHandle, t: &str) {
     let prot = sh(app).protect.load(Ordering::SeqCst);
     let lk = lock_of(app, t);
     let path = format!("/?view=ctl&t={}&prot={}&lk={}", urlenc(t), if prot { 1 } else { 0 }, if lk { 1 } else { 0 });
-    let built = WebviewWindowBuilder::new(app, &label, WebviewUrl::External(page_url(app, &path)))
+    let built = wb(app, &label, WebviewUrl::External(page_url(app, &path)))
         .title("ChatStream Labs - kontrol")
         .inner_size(CW as f64, CH as f64)
         .transparent(true)
@@ -990,12 +1031,38 @@ fn dock_measure_loop(app: AppHandle, id: String) {
     }
 }
 
+// Tombol Bisu (cfg.mute): dijalankan DI DALAM halaman widget. WebView2 versi Tauri 2.12 tidak punya SetIsMuted yang stabil,
+// jadi suaranya dibisukan dari dalam halaman: elemen <video>/<audio> (properti muted + play) dan Web Audio (semua keluaran lewat satu GainNode).
+// Disuntik saat dokumen mulai dimuat (initialization_script) dan diperbarui lewat window.__cslSetMute(true/false). Berlaku untuk halaman utama
+// widget; suara di dalam iframe lintas-situs tidak terjangkau (batasan, dicatat di HANDOFF).
+const MUTE_JS: &str = r##"(function(m){window.__cslMute=m;if(window.__cslSetMute){window.__cslSetMute(m);return;}
+var gains=[],P=window.HTMLMediaElement&&HTMLMediaElement.prototype;
+function sweep(){try{var l=document.querySelectorAll('video,audio');for(var i=0;i<l.length;i++){l[i].muted=!!window.__cslMute;}}catch(e){}}
+if(P){var d=Object.getOwnPropertyDescriptor(P,'muted');
+if(d&&d.set){Object.defineProperty(P,'muted',{get:function(){return d.get.call(this);},set:function(v){d.set.call(this,window.__cslMute?true:v);},configurable:true});
+var pl=P.play;P.play=function(){if(window.__cslMute)d.set.call(this,true);return pl.apply(this,arguments);};}}
+try{var oc=AudioNode.prototype.connect;AudioNode.prototype.connect=function(t){
+if(window.AudioDestinationNode&&t instanceof AudioDestinationNode&&this.context){var c=this.context;
+if(!c.__cslg){c.__cslg=c.createGain();oc.call(c.__cslg,t);gains.push(c.__cslg);}
+c.__cslg.gain.value=window.__cslMute?0:1;
+var a=[].slice.call(arguments);a[0]=c.__cslg;return oc.apply(this,a);}
+return oc.apply(this,arguments);};}catch(e){}
+window.__cslSetMute=function(v){window.__cslMute=!!v;sweep();for(var i=0;i<gains.length;i++){try{gains[i].gain.value=v?0:1;}catch(e){}}};
+try{new MutationObserver(sweep).observe(document,{childList:true,subtree:true});}catch(e){}
+document.addEventListener('DOMContentLoaded',sweep);sweep();})(__M__)"##;
+
+fn mute_js(cfg: &Value) -> String {
+    let on = cfg.get("mute").and_then(|v| v.as_bool()).unwrap_or(false);
+    MUTE_JS.replace("__M__", if on { "true" } else { "false" })
+}
+
 fn dock_apply(app: &AppHandle, id: &str) {
     let label = parent_label(id);
     let locked = dock_is_locked(app, &label);
     let Some(cfg) = don_find(app, id) else { return };
     dock_fit(app, id);
     js(app, &label, &dock_css_js(&cfg, locked));
+    js(app, &label, &mute_js(&cfg));
     if cfg.get("auto").and_then(|v| v.as_bool()) == Some(true) {
         js(app, &label, MEAS_JS);
     }
@@ -1010,7 +1077,7 @@ fn make_dock(app: &AppHandle, id: &str, locked: bool) -> Result<(), String> {
     }
     let title = cfg.get("name").and_then(|v| v.as_str()).unwrap_or("Browser Dock").to_string();
     let idc = id.to_string();
-    let w = WebviewWindowBuilder::new(app, &label, WebviewUrl::External(url.clone()))
+    let w = wb(app, &label, WebviewUrl::External(url.clone()))
         .title(title)
         .inner_size(420.0, 520.0)
         .min_inner_size(160.0, 100.0)
@@ -1022,6 +1089,7 @@ fn make_dock(app: &AppHandle, id: &str, locked: bool) -> Result<(), String> {
         .resizable(false) // ukuran diubah lewat grip_loop (sudut 18 px), bukan bawaan Windows (sudut ±5 px)
         .focused(false)
         .visible(false)
+        .initialization_script(mute_js(&cfg))
         .on_page_load(move |wv, p| {
             if matches!(p.event(), tauri::webview::PageLoadEvent::Finished) {
                 let a = wv.app_handle().clone();
@@ -1348,7 +1416,7 @@ fn ga_make(app: &AppHandle) {
     if let Ok(mut k) = sh(app).ga_side.lock() {
         k.clear();
     }
-    let built = WebviewWindowBuilder::new(app, "galert", WebviewUrl::External(page_url(app, "/?view=galert")))
+    let built = wb(app, "galert", WebviewUrl::External(page_url(app, "/?view=galert")))
         .title("ChatStream Labs - alert")
         .inner_size(GAW as f64, GAH as f64)
         .transparent(true)
@@ -1496,6 +1564,24 @@ fn node_run(app: &AppHandle, args: Vec<String>, mut on: impl FnMut(&Value)) -> O
     last
 }
 
+fn skipped_version(app: &AppHandle) -> Option<String> {
+    let v: Value = serde_json::from_str(&std::fs::read_to_string(bounds_path(app)).ok()?).ok()?;
+    v.get("skipUpdate").and_then(|x| x.as_str()).map(|x| x.to_string()).filter(|x| !x.is_empty())
+}
+
+fn save_skipped_version(app: &AppHandle, ver: &str) {
+    let mut v: Value = std::fs::read_to_string(bounds_path(app))
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_else(|| json!({}));
+    if !v.is_object() {
+        v = json!({});
+    }
+    v["skipUpdate"] = json!(ver);
+    let _ = std::fs::write(bounds_path(app), v.to_string());
+    log(app, &format!("update: Abaikan (versi {})", ver));
+}
+
 fn update_flow(app: &AppHandle, manual: bool, on_pct: &dyn Fn(i64)) -> String {
     if REPO.is_empty() {
         return if manual { "dev".to_string() } else { "none".to_string() };
@@ -1533,6 +1619,10 @@ fn update_flow_inner(app: &AppHandle, manual: bool, on_pct: &dyn Fn(i64)) -> Str
         _ => return fail(c.get("error").and_then(|e| e.as_str()).unwrap_or("tidak bisa memeriksa")),
     }
     let nv = c.get("version").and_then(|v| v.as_str()).unwrap_or("?").to_string();
+    if !manual && skipped_version(app).as_deref() == Some(nv.as_str()) {
+        log(app, &format!("update: versi {} diabaikan pengguna, dilewati", nv));
+        return "none".to_string();
+    }
     let yes = app
         .dialog()
         .message(format!("Versi baru v{} tersedia.\n\nKamu memakai v{}.", nv, ver))
@@ -1540,6 +1630,17 @@ fn update_flow_inner(app: &AppHandle, manual: bool, on_pct: &dyn Fn(i64)) -> Str
         .buttons(MessageDialogButtons::OkCancelCustom("Update Now".into(), "Later".into()))
         .blocking_show();
     if !yes {
+        // Pertanyaan kedua (dialog Tauri hanya punya 2 tombol): abaikan versi ini selamanya, atau tanya lagi saat aplikasi dibuka berikutnya.
+        let ignore = app
+            .dialog()
+            .message(format!("Abaikan v{}?\n\n\"Abaikan\" = tidak ditanya lagi untuk versi ini (tombol Cek Update tetap menanyakannya).", nv))
+            .title("Update")
+            .buttons(MessageDialogButtons::OkCancelCustom("Abaikan".into(), "Ingatkan nanti".into()))
+            .blocking_show();
+        if ignore {
+            save_skipped_version(app, &nv);
+            return "ignored".to_string();
+        }
         return "later".to_string();
     }
     let dest = std::env::temp_dir().join("ChatStreamLabs-update-setup.exe");
@@ -1592,7 +1693,7 @@ fn open_win(app: &AppHandle, url_s: &str, opt: &Value) {
     let width = opt.get("width").and_then(|v| v.as_f64()).unwrap_or(520.0);
     let height = opt.get("height").and_then(|v| v.as_f64()).unwrap_or(820.0);
     let title = opt.get("title").and_then(|v| v.as_str()).unwrap_or("ChatStream Labs").to_string();
-    match WebviewWindowBuilder::new(app, &label, WebviewUrl::External(full))
+    match wb(app, &label, WebviewUrl::External(full))
         .title(title)
         .inner_size(width, height)
         .decorations(is_prev)
@@ -1958,7 +2059,8 @@ fn spawn_sidecar(app: &AppHandle) -> Result<(), String> {
         .shell()
         .sidecar("node")
         .map_err(|e| e.to_string())?
-        .args([script.to_string_lossy().to_string()])
+        // hemat RAM node: batas heap 192 MB dan ruang objek muda 1 MB (cukup untuk server ini; naikkan kalau ada "out of memory" di shell-log.txt)
+        .args(["--max-old-space-size=192".to_string(), "--max-semi-space-size=1".to_string(), script.to_string_lossy().to_string()])
         .env("CG_DATA", data_dir(app).to_string_lossy().to_string())
         .env("CSL_EXT_SRC", ext.to_string_lossy().to_string())
         .spawn()
@@ -2145,7 +2247,7 @@ fn main() {
                 }
             }
             // splash: halaman splash.html lama (ditanam di exe), tidak bisa ditutup pengguna
-            WebviewWindowBuilder::new(app, "splash", WebviewUrl::App("splash.html".into()))
+            wb(&h, "splash", WebviewUrl::App("splash.html".into()))
                 .title("ChatStream Labs")
                 .inner_size(640.0, 480.0)
                 .decorations(false)
