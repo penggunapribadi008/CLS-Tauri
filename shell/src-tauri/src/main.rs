@@ -31,9 +31,11 @@ struct DockSt {
     id: String,
     locked: bool,
     url: String,
+    cont: (f64, f64), // ukuran isi halaman hasil pengukuran (mode "Ukuran otomatis"); (0,0) = belum terukur
 }
 
 struct Shell {
+    geo_busy: AtomicBool, // sedang menggeser / mengubah ukuran jendela (satu pada satu waktu)
     chat_geom: Mutex<(i32, i32, u32, u32, f64)>, // posisi/ukuran jendela chat (px fisik) + skala, untuk hover_loop
     rects: Mutex<Vec<(f64, f64, f64, f64)>>,     // kotak yang boleh diklik di jendela ter-pin (dari hook shape)
     ga_ok: AtomicBool,                           // halaman alert sudah dimuat
@@ -59,6 +61,7 @@ struct Shell {
 impl Shell {
     fn new() -> Self {
         Shell {
+            geo_busy: AtomicBool::new(false),
             chat_geom: Mutex::new((0, 0, 0, 0, 1.0)),
             rects: Mutex::new(Vec::new()),
             ga_ok: AtomicBool::new(false),
@@ -343,7 +346,7 @@ fn make_chat(app: &AppHandle) {
         .shadow(false)
         .always_on_top(true)
         .skip_taskbar(true)
-        .resizable(true)
+        .resizable(false) // ukuran diubah lewat hook resize / grip_loop (bukan bawaan Windows)
         .focused(false)
         .visible(false)
         .build();
@@ -423,36 +426,36 @@ fn toggle_lock(app: &AppHandle) {
     set_lock(app, on);
 }
 
-// Tauri 2.12 tidak punya start_resize_dragging, jadi meniru yang dilakukan Windows sendiri saat tepi jendela ditarik:
-// kirim WM_NCLBUTTONDOWN dengan kode area tepi (HTLEFT dst). Resize berjalan oleh Windows selama tombol mouse masih ditekan.
-fn resize_ht(edge: &str) -> Option<usize> {
-    Some(match edge {
-        "w" => 10,  // HTLEFT
-        "e" => 11,  // HTRIGHT
-        "n" => 12,  // HTTOP
-        "nw" => 13, // HTTOPLEFT
-        "ne" => 14, // HTTOPRIGHT
-        "s" => 15,  // HTBOTTOM
-        "sw" => 16, // HTBOTTOMLEFT
-        "se" => 17, // HTBOTTOMRIGHT
-        _ => return None,
-    })
-}
-
 #[repr(C)]
 struct Pt {
     x: i32,
     y: i32,
 }
 
+#[repr(C)]
+struct Rect {
+    left: i32,
+    top: i32,
+    right: i32,
+    bottom: i32,
+}
+
 #[link(name = "user32")]
 extern "system" {
-    fn ReleaseCapture() -> i32;
     fn GetCursorPos(p: *mut Pt) -> i32;
-    fn PostMessageW(hwnd: isize, msg: u32, wparam: usize, lparam: isize) -> i32;
+    fn GetWindowRect(hwnd: isize, r: *mut Rect) -> i32;
+    fn SetWindowPos(hwnd: isize, after: isize, x: i32, y: i32, cx: i32, cy: i32, flags: u32) -> i32;
+    fn GetAsyncKeyState(vk: i32) -> i16;
+    fn GetSystemMetrics(idx: i32) -> i32;
+    fn WindowFromPoint(p: Pt) -> isize;
+    fn GetAncestor(hwnd: isize, flags: u32) -> isize;
     fn GetWindowLongPtrW(hwnd: isize, idx: i32) -> isize;
     fn SetWindowLongPtrW(hwnd: isize, idx: i32, val: isize) -> isize;
 }
+
+const SWP_NOSIZE: u32 = 0x0001;
+const SWP_NOZORDER: u32 = 0x0004;
+const SWP_NOACTIVATE: u32 = 0x0010;
 
 const GWL_EXSTYLE: i32 = -20;
 const GWLP_HWNDPARENT: i32 = -8; // pemilik jendela (owner): jendela milik selalu tampil di atas pemiliknya
@@ -484,15 +487,190 @@ fn set_owner(child: &WebviewWindow, parent: &WebviewWindow) {
     }
 }
 
-fn start_resize(w: &WebviewWindow, ht: usize) {
-    if let Ok(h) = w.hwnd() {
-        let hwnd = h.0 as isize;
+// ---------------------------------------------------------------- geser & ubah ukuran buatan sendiri
+// Kenapa tidak memakai geser/resize bawaan Windows: geser bawaan memicu "snap" (jendela menempel ke tepi atas = layar penuh), dan area sudut
+// resize bawaan Tauri hanya ±5 px. Di sini jendela diikutkan ke kursor lewat SetWindowPos selama tombol kiri mouse ditekan (seperti versi Electron).
+// Dipakai chat dan Browser Dock. Hanya satu geser/resize berjalan pada satu waktu (geo_busy).
+fn lbutton_down() -> bool {
+    unsafe {
+        let vk = if GetSystemMetrics(23) != 0 { 0x02 } else { 0x01 }; // SM_SWAPBUTTON: tombol mouse ditukar (kidal)
+        (GetAsyncKeyState(vk) as u16 & 0x8000) != 0
+    }
+}
+
+fn start_move(app: &AppHandle, label: &str) {
+    let s = sh(app);
+    if s.geo_busy.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let Some(h) = app.get_webview_window(label).and_then(|w| hwnd_of(&w)) else {
+        s.geo_busy.store(false, Ordering::SeqCst);
+        return;
+    };
+    let a = app.clone();
+    let lbl = label.to_string();
+    std::thread::spawn(move || {
+        let mut c0 = Pt { x: 0, y: 0 };
+        let mut r0 = Rect { left: 0, top: 0, right: 0, bottom: 0 };
         unsafe {
-            let mut p = Pt { x: 0, y: 0 };
-            GetCursorPos(&mut p);
-            let lp = (((p.y as isize) & 0xFFFF) << 16) | ((p.x as isize) & 0xFFFF);
-            ReleaseCapture();
-            PostMessageW(hwnd, 0x00A1, ht, lp); // 0x00A1 = WM_NCLBUTTONDOWN
+            GetCursorPos(&mut c0);
+            GetWindowRect(h, &mut r0);
+        }
+        if lbl == "chat" {
+            js(&a, "chat", "window.__pause&&window.__pause(true)"); // halaman chat berhenti menggambar selama digeser
+        }
+        let t0 = Instant::now();
+        while lbutton_down() && t0.elapsed() < Duration::from_secs(25) && !a.state::<Shell>().quitting.load(Ordering::SeqCst) {
+            let mut c = Pt { x: 0, y: 0 };
+            unsafe {
+                GetCursorPos(&mut c);
+                SetWindowPos(h, 0, r0.left + c.x - c0.x, r0.top + c.y - c0.y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+            std::thread::sleep(Duration::from_millis(12));
+        }
+        if lbl == "chat" {
+            js(&a, "chat", "window.__pause&&window.__pause(false)");
+        }
+        let st = a.state::<Shell>();
+        st.bounds_dirty.store(true, Ordering::SeqCst);
+        st.geo_busy.store(false, Ordering::SeqCst);
+    });
+}
+
+// edge: gabungan huruf n/s/e/w, mis. "e", "se", "nw". Sisi yang berlawanan tetap diam. min_w/min_h dalam piksel CSS.
+fn start_resize_poll(app: &AppHandle, label: &str, edge: &str, min_w: f64, min_h: f64) {
+    let (n, s_, e, w_) = (edge.contains('n'), edge.contains('s'), edge.contains('e'), edge.contains('w'));
+    if !(n || s_ || e || w_) {
+        return;
+    }
+    let st = sh(app);
+    if st.geo_busy.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let Some(win) = app.get_webview_window(label) else {
+        st.geo_busy.store(false, Ordering::SeqCst);
+        return;
+    };
+    let Some(h) = hwnd_of(&win) else {
+        st.geo_busy.store(false, Ordering::SeqCst);
+        return;
+    };
+    let sf = win.scale_factor().unwrap_or(1.0);
+    let (minw, minh) = ((min_w * sf).round() as i32, (min_h * sf).round() as i32);
+    let a = app.clone();
+    std::thread::spawn(move || {
+        let mut c0 = Pt { x: 0, y: 0 };
+        let mut r0 = Rect { left: 0, top: 0, right: 0, bottom: 0 };
+        unsafe {
+            GetCursorPos(&mut c0);
+            GetWindowRect(h, &mut r0);
+        }
+        let t0 = Instant::now();
+        while lbutton_down() && t0.elapsed() < Duration::from_secs(25) && !a.state::<Shell>().quitting.load(Ordering::SeqCst) {
+            let mut c = Pt { x: 0, y: 0 };
+            unsafe {
+                GetCursorPos(&mut c);
+            }
+            let (dx, dy) = (c.x - c0.x, c.y - c0.y);
+            let mut l = r0.left;
+            let mut t = r0.top;
+            let mut r = r0.right;
+            let mut b = r0.bottom;
+            if w_ {
+                l = (r0.left + dx).min(r0.right - minw);
+            }
+            if e {
+                r = (r0.right + dx).max(r0.left + minw);
+            }
+            if n {
+                t = (r0.top + dy).min(r0.bottom - minh);
+            }
+            if s_ {
+                b = (r0.bottom + dy).max(r0.top + minh);
+            }
+            unsafe {
+                SetWindowPos(h, 0, l, t, r - l, b - t, SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+            std::thread::sleep(Duration::from_millis(12));
+        }
+        let st = a.state::<Shell>();
+        st.bounds_dirty.store(true, Ordering::SeqCst);
+        st.geo_busy.store(false, Ordering::SeqCst);
+    });
+}
+
+fn min_size_of(label: &str) -> (f64, f64) {
+    if label == "chat" { (300.0, 300.0) } else { (160.0, 100.0) }
+}
+
+// Browser Dock (halaman luar, tidak bisa memasang pegangan sendiri) dan chat: tekan tombol kiri di PINGGIR atau terutama di SUDUT jendela
+// yang tidak di-pin = ubah ukuran. Sudut 18 px (dua arah sekaligus), tepi 8 px. Hanya jendela yang benar-benar ada di bawah kursor
+// (bukan tertutup jendela lain, mis. kotak tombol) yang dihitung.
+fn grip_loop(app: AppHandle) {
+    let mut was_down = false;
+    loop {
+        std::thread::sleep(Duration::from_millis(25));
+        if sh(&app).quitting.load(Ordering::SeqCst) {
+            break;
+        }
+        let down = lbutton_down();
+        let pressed = down && !was_down;
+        was_down = down;
+        if !pressed || sh(&app).geo_busy.load(Ordering::SeqCst) {
+            continue;
+        }
+        let mut labels: Vec<String> = sh(&app)
+            .docks
+            .lock()
+            .map(|m| m.iter().filter(|(_, d)| !d.locked).map(|(l, _)| l.clone()).collect())
+            .unwrap_or_default();
+        if !sh(&app).locked.load(Ordering::SeqCst) && app.get_webview_window("chat").is_some() {
+            labels.push("chat".to_string());
+        }
+        let mut c = Pt { x: 0, y: 0 };
+        unsafe {
+            GetCursorPos(&mut c);
+        }
+        for label in labels {
+            let Some(w) = app.get_webview_window(&label) else { continue };
+            if !w.is_visible().unwrap_or(false) {
+                continue;
+            }
+            let Some(h) = hwnd_of(&w) else { continue };
+            let mut r = Rect { left: 0, top: 0, right: 0, bottom: 0 };
+            unsafe {
+                GetWindowRect(h, &mut r);
+            }
+            if c.x < r.left || c.x >= r.right || c.y < r.top || c.y >= r.bottom {
+                continue;
+            }
+            let root = unsafe { GetAncestor(WindowFromPoint(Pt { x: c.x, y: c.y }), 2) }; // 2 = GA_ROOT
+            if root != h {
+                continue;
+            }
+            let sf = w.scale_factor().unwrap_or(1.0);
+            let (e_px, c_px) = ((8.0 * sf) as i32, (18.0 * sf) as i32);
+            let (x, y) = (c.x - r.left, c.y - r.top);
+            let (ww, hh) = (r.right - r.left, r.bottom - r.top);
+            let (cl, cr, ct, cb) = (x < c_px, x >= ww - c_px, y < c_px, y >= hh - c_px);
+            let mut edge = String::new();
+            if (cl || cr) && (ct || cb) {
+                edge.push(if ct { 'n' } else { 's' });
+                edge.push(if cl { 'w' } else { 'e' });
+            } else if x < e_px {
+                edge.push('w');
+            } else if x >= ww - e_px {
+                edge.push('e');
+            } else if y < e_px {
+                edge.push('n');
+            } else if y >= hh - e_px {
+                edge.push('s');
+            }
+            if !edge.is_empty() {
+                let (mw, mh) = min_size_of(&label);
+                start_resize_poll(&app, &label, &edge, mw, mh);
+                break;
+            }
         }
     }
 }
@@ -686,7 +864,6 @@ fn don_save_lock(app: &AppHandle, id: &str, on: bool) {
 
 fn dock_mode(w: &WebviewWindow, locked: bool) {
     let _ = w.set_ignore_cursor_events(locked);
-    let _ = w.set_resizable(!locked);
     set_noactivate(w, locked);
 }
 
@@ -707,8 +884,21 @@ fn dock_fit(app: &AppHandle, id: &str) {
     let Ok(sz) = w.inner_size() else { return };
     let cw = sz.width as f64 / sf;
     let ch = sz.height as f64 / sf;
-    let rw = num(cfg.get("refW")).filter(|v| *v >= 1.0).unwrap_or(1280.0);
-    let rh = num(cfg.get("refH")).filter(|v| *v >= 1.0).unwrap_or(720.0);
+    let mut rw = num(cfg.get("refW")).filter(|v| *v >= 1.0).unwrap_or(1280.0);
+    let mut rh = num(cfg.get("refH")).filter(|v| *v >= 1.0).unwrap_or(720.0);
+    // "Ukuran otomatis": pakai ukuran isi halaman hasil pengukuran (kalau sudah terukur), supaya isi widget memenuhi jendela
+    if cfg.get("auto").and_then(|v| v.as_bool()) == Some(true) {
+        let cont = sh(app)
+            .docks
+            .lock()
+            .ok()
+            .and_then(|m| m.get(&label).map(|d| d.cont))
+            .unwrap_or((0.0, 0.0));
+        if cont.0 >= 20.0 && cont.1 >= 20.0 {
+            rw = cont.0;
+            rh = cont.1;
+        }
+    }
     let z = if cfg.get("fit").and_then(|v| v.as_bool()) == Some(false) {
         1.0
     } else {
@@ -731,9 +921,73 @@ fn dock_css_js(cfg: &Value, locked: bool) -> String {
     if !locked && dock_op > 0.0 {
         css.push_str(&format!("html{{background:rgba(14,18,20,{})!important}}", dock_op / 100.0));
     }
-    let tpl = "(function(){var s=document.getElementById('__cs_css');if(!s){s=document.createElement('style');s.id='__cs_css';(document.head||document.documentElement).appendChild(s);}s.textContent=__CSS__;var f=document.getElementById('__cs_fr');if(__FRAME__){if(!f){f=document.createElement('div');f.id='__cs_fr';f.style.cssText='position:fixed;left:0;top:0;right:0;bottom:0;pointer-events:none;box-sizing:border-box;z-index:2147483647;box-shadow:inset 0 0 0 2px rgba(255,255,255,.4)';(document.body||document.documentElement).appendChild(f);}}else if(f){f.remove();}})()";
+    let tpl = "(function(){var s=document.getElementById('__cs_css');if(!s){s=document.createElement('style');s.id='__cs_css';(document.head||document.documentElement).appendChild(s);}s.textContent=__CSS__;var f=document.getElementById('__cs_fr');if(__FRAME__){if(!f){f=document.createElement('div');f.id='__cs_fr';f.style.cssText='position:fixed;left:0;top:0;right:0;bottom:0;pointer-events:none;box-sizing:border-box;z-index:2147483647;box-shadow:inset 0 0 0 2px rgba(255,255,255,.4)';var q=[['left:0;top:0;border-left:3px solid #fff;border-top:3px solid #fff'],['right:0;top:0;border-right:3px solid #fff;border-top:3px solid #fff'],['left:0;bottom:0;border-left:3px solid #fff;border-bottom:3px solid #fff'],['right:0;bottom:0;border-right:3px solid #fff;border-bottom:3px solid #fff']];for(var i=0;i<4;i++){var k=document.createElement('i');k.style.cssText='position:absolute;width:16px;height:16px;box-sizing:border-box;'+q[i][0];f.appendChild(k);}(document.body||document.documentElement).appendChild(f);}}else if(f){f.remove();}})()";
     tpl.replace("__CSS__", &serde_json::to_string(&css).unwrap_or_else(|_| "\"\"".to_string()))
         .replace("__FRAME__", if locked { "false" } else { "true" })
+}
+
+// Skrip yang berjalan DI DALAM halaman widget (hanya saat "Ukuran otomatis" nyala): tiap 1 dtk mengukur kotak isi yang terlihat
+// (gambar, video, kanvas, svg, iframe, teks) lalu menulis hasilnya ke bagian # alamat halaman lewat history.replaceState (tidak memuat ulang,
+// tidak memicu hashchange). Cangkang membacanya dari url() jendela. Halaman yang memakai # sendiri dibiarkan (tidak diukur).
+const MEAS_JS: &str = r##"(function(){if(window.__cslm)return;window.__cslm=1;var meas=function(){try{var x1=1e9,y1=1e9,x2=-1e9,y2=-1e9,seen=new Map();
+function ok(e){var v=seen.get(e);if(v===undefined){var s=getComputedStyle(e);v=s.display!=='none'&&+s.opacity!==0;seen.set(e,v);}return v;}
+function vis(el){if(getComputedStyle(el).visibility==='hidden')return false;for(var e=el;e&&e.nodeType===1;e=e.parentElement)if(!ok(e))return false;return true;}
+function add(r){if(r.width<2||r.height<2)return;x1=Math.min(x1,r.left);y1=Math.min(y1,r.top);x2=Math.max(x2,r.right);y2=Math.max(y2,r.bottom);}
+var n=0,els=document.querySelectorAll('img,video,canvas,svg,iframe');for(var i=0;i<els.length;i++){if(++n>600)break;if(vis(els[i]))add(els[i].getBoundingClientRect());}
+var tw=document.createTreeWalker(document.body||document.documentElement,NodeFilter.SHOW_TEXT),rg=document.createRange();
+for(var t,k=0;(t=tw.nextNode())&&k<1500;k++){if(!t.nodeValue.trim())continue;var p=t.parentElement;if(!p||/^(SCRIPT|STYLE|NOSCRIPT)$/.test(p.tagName)||!vis(p))continue;rg.selectNodeContents(t);add(rg.getBoundingClientRect());}
+if(x2<x1)return null;return{w:x2-x1,h:y2-y1};}catch(e){return null;}};
+function tick(){var m=meas();if(!m)return;var h=location.hash;if(h&&h.indexOf('#__csl=')!==0)return;try{history.replaceState(history.state,'',location.pathname+location.search+'#__csl='+Math.ceil(m.w)+','+Math.ceil(m.h));}catch(e){}}
+setInterval(tick,1000);setTimeout(tick,300);})()"##;
+
+// Membaca hasil ukur dari alamat halaman tiap 1 dtk. Ukuran yang dipakai = yang TERBESAR yang pernah terlihat (naik saja, tidak turun
+// saat widget kosong), jadi tidak bolak-balik mengecil-membesar. URL ini bisa memuat kunci stream, jadi TIDAK PERNAH dicatat ke log.
+fn dock_measure_loop(app: AppHandle, id: String) {
+    let label = parent_label(&id);
+    loop {
+        std::thread::sleep(Duration::from_millis(1000));
+        let Some(w) = app.get_webview_window(&label) else { break };
+        if sh(&app).quitting.load(Ordering::SeqCst) {
+            break;
+        }
+        let auto = don_find(&app, &id)
+            .and_then(|c| c.get("auto").and_then(|v| v.as_bool()))
+            .unwrap_or(false);
+        if !auto {
+            continue;
+        }
+        let Ok(u) = w.url() else { continue };
+        let dims = u.fragment().and_then(|f| f.strip_prefix("__csl=")).and_then(|f| {
+            let mut it = f.split(',');
+            let a = it.next()?.parse::<f64>().ok()?;
+            let b = it.next()?.parse::<f64>().ok()?;
+            Some((a, b))
+        });
+        let Some((mw, mh)) = dims else { continue };
+        if !(mw >= 20.0 && mh >= 20.0) {
+            continue;
+        }
+        let (mw, mh) = (mw.ceil().min(7680.0), mh.ceil().min(4320.0));
+        let grew = {
+            let s = sh(&app);
+            let mut m = s.docks.lock().unwrap_or_else(|e| e.into_inner());
+            match m.get_mut(&label) {
+                Some(d) => {
+                    let p = d.cont;
+                    if mw > p.0 * 1.02 || mh > p.1 * 1.02 {
+                        d.cont = (p.0.max(mw), p.1.max(mh));
+                        true
+                    } else {
+                        false
+                    }
+                }
+                None => false,
+            }
+        };
+        if grew {
+            dock_fit(&app, &id);
+        }
+    }
 }
 
 fn dock_apply(app: &AppHandle, id: &str) {
@@ -742,6 +996,9 @@ fn dock_apply(app: &AppHandle, id: &str) {
     let Some(cfg) = don_find(app, id) else { return };
     dock_fit(app, id);
     js(app, &label, &dock_css_js(&cfg, locked));
+    if cfg.get("auto").and_then(|v| v.as_bool()) == Some(true) {
+        js(app, &label, MEAS_JS);
+    }
 }
 
 fn make_dock(app: &AppHandle, id: &str, locked: bool) -> Result<(), String> {
@@ -762,7 +1019,7 @@ fn make_dock(app: &AppHandle, id: &str, locked: bool) -> Result<(), String> {
         .shadow(false)
         .always_on_top(true)
         .skip_taskbar(true)
-        .resizable(!locked)
+        .resizable(false) // ukuran diubah lewat grip_loop (sudut 18 px), bukan bawaan Windows (sudut ±5 px)
         .focused(false)
         .visible(false)
         .on_page_load(move |wv, p| {
@@ -775,7 +1032,7 @@ fn make_dock(app: &AppHandle, id: &str, locked: bool) -> Result<(), String> {
         .build()
         .map_err(|e| e.to_string())?;
     if let Ok(mut m) = sh(app).docks.lock() {
-        m.insert(label.clone(), DockSt { id: id.to_string(), locked, url: url.to_string() });
+        m.insert(label.clone(), DockSt { id: id.to_string(), locked, url: url.to_string(), cont: (0.0, 0.0) });
     }
     restore_bounds(app, &w, &label);
     let _ = w.set_content_protected(sh(app).protect.load(Ordering::SeqCst));
@@ -810,6 +1067,8 @@ fn make_dock(app: &AppHandle, id: &str, locked: bool) -> Result<(), String> {
     let _ = w.show();
     make_ctl(app, id);
     push_state(app, None);
+    let (ma, mi) = (app.clone(), id.to_string());
+    std::thread::spawn(move || dock_measure_loop(ma, mi));
     Ok(())
 }
 
@@ -860,6 +1119,7 @@ fn don_sync(app: &AppHandle) {
                     if let Ok(mut m) = sh(app).docks.lock() {
                         if let Some(d) = m.get_mut(&label) {
                             d.url = u.to_string();
+                            d.cont = (0.0, 0.0); // URL baru = ukur ulang isinya
                         }
                     }
                     let code = format!("location.replace({})", serde_json::to_string(u.as_str()).unwrap_or_default());
@@ -1574,9 +1834,7 @@ fn handle_hook(app: &AppHandle, name: &str, a: &[Value]) -> Value {
             let id = arg_s(1);
             let t = if id.is_empty() { "chat".to_string() } else { id };
             if arg_b(0) && !lock_of(app, &t) {
-                if let Some(w) = app.get_webview_window(&parent_label(&t)) {
-                    let _ = w.start_dragging();
-                }
+                start_move(app, &parent_label(&t));
             }
             Value::Null
         }
@@ -1584,9 +1842,9 @@ fn handle_hook(app: &AppHandle, name: &str, a: &[Value]) -> Value {
             let id = arg_s(2);
             let t = if id.is_empty() { "chat".to_string() } else { id };
             if arg_b(0) && !lock_of(app, &t) {
-                if let (Some(w), Some(ht)) = (app.get_webview_window(&parent_label(&t)), resize_ht(&arg_s(1))) {
-                    start_resize(&w, ht);
-                }
+                let label = parent_label(&t);
+                let (mw, mh) = min_size_of(&label);
+                start_resize_poll(app, &label, &arg_s(1), mw, mh);
             }
             Value::Null
         }
@@ -1807,6 +2065,8 @@ fn startup(app: AppHandle) {
     // klik di dalam jendela chat ter-pin (lihat hover_loop)
     let hv = app.clone();
     std::thread::spawn(move || hover_loop(hv));
+    let gp = app.clone();
+    std::thread::spawn(move || grip_loop(gp));
     // simpan posisi jendela tiap ada perubahan (maks sekali per 2 dtk)
     loop {
         std::thread::sleep(Duration::from_secs(2));
