@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/banner.png" alt="ChatStream Labs — semua chat live, satu tempat" width="100%">
+<img src="docs/banner.svg" alt="ChatStream Labs — semua chat live, satu tempat" width="100%">
 
 <br>
 
