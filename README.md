@@ -1,63 +1,130 @@
 <div align="center">
 
-# 💬 ChatStream Labs
+<img src="docs/banner.png" alt="ChatStream Labs — semua chat live, satu tempat" width="100%">
 
-### Semua chat live kamu, di satu tempat.
+<br>
 
-YouTube · TikTok · Twitch · Kick — tampil rapi di layar, di atas game, dan di OBS.
+![Versi](https://img.shields.io/badge/versi-1.1.7-8b5cf6?style=for-the-badge)
+![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0ea5e9?style=for-the-badge&logo=windows&logoColor=white)
+![Platform](https://img.shields.io/badge/YouTube%20·%20TikTok%20·%20Twitch%20·%20Kick-ec4899?style=for-the-badge)
+
+**Live di banyak platform tanpa pusing banyak tab.**
+Semua chat masuk ke satu aliran yang rapi, tampil di atas game, dan siap dipasang di OBS.
+
+[Chat di atas game](#-chat-melayang-di-atas-game) ·
+[Overlay OBS](#-overlay-obs-yang-bikin-channelmu-beda) ·
+[Browser Dock](#-browser-dock-widget-donasi-di-atas-game) ·
+[Mulai](#-mulai-dalam-3-langkah)
 
 </div>
 
 ---
 
-## ✨ Kenapa ChatStream Labs?
+## 🎮 Chat melayang di atas game
 
-Live di beberapa platform sekaligus itu ribet: tab banyak, chat terlewat, layar penuh jendela.
-ChatStream Labs menyatukan semuanya jadi **satu aliran chat** yang enak dilihat dan tidak mengganggu permainanmu.
+Chat YouTube, TikTok, Twitch, dan Kick masuk berurutan dalam **satu jendela**. Kunci jendelanya, dan jendela jadi *tembus klik*, jadi game tetap bisa kamu mainkan seolah chat tidak ada.
+
+<div align="center">
+<img src="docs/chat-di-atas-game.png" alt="Jendela chat di atas game" width="92%">
+</div>
+
+<br>
+
+| | |
+|---|---|
+| 🔒 **Mode kunci** | Transparan, tanpa bingkai, klik tembus ke game |
+| 👀 **Sembunyikan dari OBS** | Penonton tidak melihat jendela pribadimu, hanya kamu |
+| ⌨️ **Hotkey global** | Kunci, sembunyikan, bersihkan chat, tanpa keluar dari game |
+| 📈 **Total penonton** | Jumlah penonton yang sedang menonton, per platform dan gabungan |
+| 🏷️ **Label MOD dan BOT** | Mudah membedakan moderator, bot, dan penonton biasa |
 
 ---
 
-## 🎮 Chat melayang di atas game
+## 📺 Overlay OBS yang bikin channelmu beda
 
-- **Satu jendela untuk semua platform.** Chat YouTube, TikTok, Twitch, dan Kick masuk berurutan, lengkap dengan label MOD dan BOT.
-- **Mode kunci.** Jendela jadi transparan dan *tembus klik*, jadi game tetap bisa kamu mainkan seolah chat tidak ada.
-- **Geser dan ubah ukuran** sesukamu saat tidak dikunci.
-- **Sembunyikan dari OBS.** Penonton tidak melihat jendela pribadimu, hanya kamu.
-- **Hotkey global.** Kunci, sembunyikan, bersihkan chat, dan lainnya, tanpa keluar dari game.
+Pilih gaya yang cocok dengan karaktermu, atau bikin gaya sendiri dengan CSS. Pratinjaunya langsung berubah saat kamu mengatur.
 
-## 🖥️ Overlay OBS yang bikin channel-mu beda
+<div align="center">
+<img src="docs/gaya-overlay.png" alt="Gaya overlay: Kartu, Persona 5, Neon, Retro" width="100%">
+</div>
 
-- Pilih gaya: **Default, Kartu, Persona 5, Neon, Retro**, atau bikin gayamu sendiri dengan CSS.
-- Atur ukuran huruf, jarak, kiri/kanan, arah muncul, animasi masuk, dan latar chat.
-- **Pratinjau langsung** saat kamu mengubah pengaturan.
-- **Tambahkan ke OBS dengan satu klik.** Tidak perlu salin-tempel manual.
+<br>
+
+- **Satu klik ke OBS.** Overlay ditambahkan otomatis, tidak perlu salin-tempel alamat.
+- **Atur sesukamu:** ukuran huruf, jarak, kiri atau kanan, arah muncul, animasi masuk, dan latar chat.
+- **Gaya buatan sendiri:** tambah, ubah, dan hapus gaya CSS dengan pratinjau langsung.
+
+---
 
 ## 🎁 Momen penting tampil menonjol
 
-- **Super Chat dan Super Sticker YouTube** tampil besar dengan nominal dan warnanya.
-- **TikTok:** hadiah, penonton bergabung, suka, ikuti, bagikan, langganan. Tiap jenis bisa diberi warna dan latar sendiri.
-- **Alert hadiah** yang muncul cantik di layar.
-- **Twitch dan Kick** (*eksperimental*): Bits, subscribe, gift sub, raid, follow, dan lainnya.
+<table>
+<tr>
+<td width="50%" valign="top">
+
+**▶️ YouTube**
+Super Chat dan Super Sticker tampil besar lengkap dengan nominal dan warnanya. Member baru juga mendapat sorotan.
+
+**🎵 TikTok**
+Hadiah, penonton bergabung, suka, ikuti, bagikan, dan langganan. Tiap jenis bisa diberi warna dan latar sendiri.
+
+</td>
+<td width="50%" valign="top">
+
+**🎁 Alert hadiah**
+Hadiah TikTok muncul sebagai alert cantik yang ukuran, arah, dan lamanya bisa kamu atur.
+
+**🟣 Twitch dan 🟢 Kick** *(eksperimental)*
+Bits, subscribe, gift sub, raid, follow, dan hadiah poin ikut tampil di chat.
+
+</td>
+</tr>
+</table>
+
+---
 
 ## 🔔 Browser Dock: widget donasi di atas game
 
-Tempel URL widget alert atau media share (misalnya **Saweria**), dan widgetnya tampil di jendela sendiri di atas game.
-Browser Chrome tidak perlu dibuka.
+Tempel URL widget alert atau media share (misalnya **Saweria**), dan widgetnya tampil di jendela sendiri di atas game. Browser Chrome tidak perlu dibuka.
 
-- Bisa lebih dari satu dock, masing-masing dengan **opacity** dan pengaturan sendiri
-- Ikut mode kunci: transparan, tembus klik, tidak mencuri fokus
-- Saklar **bisu**, hotkey, dan menu tray
-- Posisi dan ukuran diingat
+- 🪟 Bisa **lebih dari satu dock**, masing-masing dengan pengaturan sendiri
+- 🎚️ **Opacity** isi dan latar yang bisa diatur terpisah
+- 🔇 Saklar **bisu**, hotkey, dan menu di tray
+- 📌 Ikut **mode kunci**: transparan, tembus klik, tidak mencuri fokus
+- 📐 Posisi dan ukuran **diingat**
+
+---
+
+## 🧭 Dashboard: pusat kendali
+
+Semua dikendalikan dari satu tempat: buka dan tutup jendela, pasang widget, cek status tiap platform, dan atur tampilan chat.
+
+<div align="center">
+<img src="docs/dashboard.png" alt="Dashboard ChatStream Labs" width="88%">
+</div>
+
+<br>
+
+<table>
+<tr>
+<td width="50%">
+<img src="docs/monitor.png" alt="Pengaturan tampilan Monitor">
+<p align="center"><b>Monitor</b><br>chat pribadimu, dengan pratinjau langsung</p>
+</td>
+<td width="50%">
+<img src="docs/overlay.png" alt="Pengaturan Overlay">
+<p align="center"><b>Overlay</b><br>chat untuk penonton di OBS</p>
+</td>
+</tr>
+</table>
+
+> *Tampilan di atas memakai nama dan chat contoh.*
+
+---
 
 ## 📊 Laporan penonton
 
-Lihat total penonton saat ini, lalu buka **Laporan** untuk grafik, puncak, rata-rata, jumlah chat, hadiah, Super Chat, dan riwayat tiap sesi live.
-
-## 🧩 Rapi dan ringan
-
-- Dashboard bergaya **Spatial UI**: gelap, halus, dan modern
-- Dashboard otomatis ditutup dari memori setelah beberapa detik di tray
-- Tema, port, dan semua pengaturan chat mudah dicari di Dashboard
+Setiap sesi live tercatat otomatis. Buka **Laporan penonton** untuk melihat grafik penonton, puncak, rata-rata, jumlah chat, hadiah, Super Chat, dan riwayat tiap sesi.
 
 ---
 
@@ -65,10 +132,9 @@ Lihat total penonton saat ini, lalu buka **Laporan** untuk grafik, puncak, rata-
 
 1. **Pasang** aplikasinya dari halaman [Releases](../../releases).
 2. **Isi username** akun live kamu di Dashboard → *Koneksi*, lalu klik **Sambungkan**.
-3. **Buka jendela chat**, atau tambahkan overlay ke OBS. Selesai.
+3. **Buka jendela chat**, atau tambahkan overlay ke OBS. Selesai. 🎉
 
-> Ingin membalas chat dari aplikasi? Ada fitur **Kirim Chat** (*eksperimental*, bawaannya mati) lewat ekstensi Chrome.
-> Nyalakan di Dashboard → Koneksi.
+> 💡 Mau membalas chat dari aplikasi? Ada fitur **Kirim Chat** lewat ekstensi Chrome (*eksperimental*, bawaannya mati). Nyalakan di Dashboard → Koneksi.
 
 ---
 
