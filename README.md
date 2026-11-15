@@ -136,18 +136,8 @@ Setiap sesi live tercatat otomatis. Buka **Laporan penonton** untuk melihat graf
 
 > 💡 Mau membalas chat dari aplikasi? Ada fitur **Kirim Chat** lewat ekstensi Chrome (*eksperimental*, bawaannya mati). Nyalakan di Dashboard → Koneksi.
 
----
-
-## ⚠️ Perlu kamu tahu
-
-- Cara mengambil chat YouTube dan TikTok **tidak resmi** dan bisa berhenti bekerja sewaktu-waktu. Memakainya bisa melanggar ketentuan layanan platform, jadi pakai dengan risiko sendiri.
-- Aplikasi belum bertanda tangan digital, jadi Windows SmartScreen bisa memberi peringatan saat instal. Pilih **Run anyway** kalau kamu percaya sumbernya.
-- Twitch dan Kick masih **eksperimental** dan belum diuji dengan live sungguhan.
-
----
-
 <div align="center">
 
-Dibuat untuk streamer, supaya fokusnya ke konten, bukan ke jendela. 💜
+Dibuat untuk Streamer khusus nya yang cuma punya 1 monitor aja. 💜
 
 </div>
