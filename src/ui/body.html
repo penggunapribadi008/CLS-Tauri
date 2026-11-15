@@ -17,15 +17,15 @@
 <div id="sb">
   <button class="sbi" data-t="d">Dashboard</button><button class="sbi" data-t="k">Koneksi</button>
   <div class="sbl"></div>
-  <button class="sbi" data-t="p">Pribadi</button><button class="sbi" data-t="o">Overlay</button><button class="sbi" data-t="h">Hotkey</button>
+  <button class="sbi" data-t="p">Monitor</button><button class="sbi" data-t="o">Overlay</button><button class="sbi" data-t="h">Hotkey</button>
   <div class="sbl"></div>
   <button class="sbi" data-t="r">Laporan penonton</button>
   <div class="sbsp"></div>
   <div class="sbvr"><div class="sbver">v{{VERSION}}</div><button class="sbupd" id="sbupd" type="button">Cek Update</button></div>
 </div>
-<div id="dpv"><div class="pvbar"><button class="btn sm" id="pvm_prev">Kirim Chat Pratinjau</button><button class="btn sm" id="pvm_live">Kirim Chat ke Dock</button></div><div class="pvwrap"><iframe id="pvD" title="Pratinjau Pribadi"></iframe><iframe id="pvO" title="Pratinjau Overlay"></iframe><div class="pvnote" id="pvnote" hidden></div></div></div>
+<div id="dpv"><div class="pvbar"><button class="btn sm" id="pvm_prev">Kirim Chat Pratinjau</button><button class="btn sm" id="pvm_live">Kirim Chat ke Dock</button></div><div class="pvwrap"><iframe id="pvD" title="Pratinjau Monitor"></iframe><iframe id="pvO" title="Pratinjau Overlay"></iframe><div class="pvnote" id="pvnote" hidden></div></div></div>
 <div id="panel">
-  <div class="tabs"><div class="tabrow"><button class="tab on" data-t="k">Koneksi</button><button class="tab" data-t="p">Pribadi</button><button class="tab" data-t="o">Overlay</button><button class="tab" data-t="h">Hotkey</button></div></div>
+  <div class="tabs"><div class="tabrow"><button class="tab on" data-t="k">Koneksi</button><button class="tab" data-t="p">Monitor</button><button class="tab" data-t="o">Overlay</button><button class="tab" data-t="h">Hotkey</button></div></div>
   <div id="panes">
   <div class="pane on" id="pd">
     <div class="dsec"><div class="dsh">Chat Dock</div>
@@ -62,10 +62,6 @@
       <details class="kkopt"><summary>Buka halaman chat manual</summary>
         <div class="btns" style="flex-wrap:wrap"><button class="btn b3 sm" data-pf="youtube" id="op_youtube">Buka chat YouTube</button><button class="btn b3 sm" data-pf="tiktok" id="op_tiktok">Buka live TikTok</button><button class="btn b3 sm" data-pf="twitch" id="op_twitch">Buka chat Twitch</button><button class="btn b3 sm" data-pf="kick" id="op_kick">Buka chat Kick</button></div>
         <div class="btns" style="flex-wrap:wrap"><button class="btn b4 sm" data-pf="youtube" id="cp_youtube">Salin alamat YouTube</button><button class="btn b4 sm" data-pf="tiktok" id="cp_tiktok">Salin alamat TikTok</button><button class="btn b4 sm" data-pf="twitch" id="cp_twitch">Salin alamat Twitch</button><button class="btn b4 sm" data-pf="kick" id="cp_kick">Salin alamat Kick</button></div></details></div>
-    <div class="card"><h3>Port lokal</h3>
-      <div style="display:flex;align-items:stretch;margin:8px 0;border:1px solid var(--line,#3a3f4b);border-radius:10px;overflow:hidden"><span style="padding:9px 4px 9px 12px;opacity:.65;white-space:nowrap;user-select:none">http://localhost:</span><input type="number" id="portIn" min="1024" max="65535" inputmode="numeric" style="flex:1;min-width:0;border:0;outline:0;background:transparent;color:inherit;font:inherit;padding:9px 12px 9px 0"></div>
-      <div class="btns"><button class="btn b1 sm" id="portsave">Simpan port</button><button class="btn b4 sm" id="portavoid">Hindari</button><button class="btn b3 sm" id="portrestart" style="display:none">Mulai ulang sekarang</button></div>
-      <div id="portmsg" class="hint"></div></div>
     <div class="card"><h3>Nama bot tambahan</h3><input type="text" id="botNames" placeholder="pisahkan dengan koma, contoh: moobot, fossabot">
       <div class="btns"><button class="btn b1" id="sbot">Terapkan</button></div></div>
   </div>
@@ -98,21 +94,25 @@
         <li><div class="sn">4</div><div class="sb"><b>Tambahkan overlay</b></div></li>
       </ol>
       <label><span>Alamat overlay (kalau mau pasang manual)</span></label><input type="text" readonly id="u2"></div>
+    <div class="card"><h3>Port lokal</h3>
+      <div style="display:flex;align-items:stretch;margin:8px 0;border:1px solid var(--line,#3a3f4b);border-radius:10px;overflow:hidden"><span style="padding:9px 4px 9px 12px;opacity:.65;white-space:nowrap;user-select:none">http://localhost:</span><input type="number" id="portIn" min="1024" max="65535" inputmode="numeric" style="flex:1;min-width:0;border:0;outline:0;background:transparent;color:inherit;font:inherit;padding:9px 12px 9px 0"></div>
+      <div class="btns"><button class="btn b1 sm" id="portsave">Simpan port</button><button class="btn b4 sm" id="portavoid">Hindari</button><button class="btn b3 sm" id="portrestart" style="display:none">Mulai ulang sekarang</button></div>
+      <div id="portmsg" class="hint"></div></div>
     <div class="bar"><button class="btn b4" data-reset="overlay">Reset</button><button class="btn b1" data-apply="overlay">Terapkan</button></div></div>
   <div class="pane" id="ph"><div class="card"><h3>Hotkey</h3>
     <div id="hkl"></div></div>
     <div class="bar"><button class="btn b4" id="hkdef">Kembalikan default</button><button class="btn b1" id="hkapply">Terapkan</button></div></div>
-  <div class="pane" id="pgdock_yt"><div class="pghead"><button class="btn b4 sm" data-back="p">&#8249; Kembali</button><b><img src="/yt.png" alt="">YouTube &middot; Pribadi</b></div><div id="pgb_dock_yt"></div>
+  <div class="pane" id="pgdock_yt"><div class="pghead"><button class="btn b4 sm" data-back="p">&#8249; Kembali</button><b><img src="/yt.png" alt="">YouTube &middot; Monitor</b></div><div id="pgb_dock_yt"></div>
     <div class="bar"><button class="btn b4" data-resetp="dock:yt">Reset</button><button class="btn b1" data-apply="dock">Terapkan</button></div></div>
-  <div class="pane" id="pgdock_tt"><div class="pghead"><button class="btn b4 sm" data-back="p">&#8249; Kembali</button><b><img src="/tt.png" alt="">TikTok &middot; Pribadi</b></div><div id="pgb_dock_tt"></div>
+  <div class="pane" id="pgdock_tt"><div class="pghead"><button class="btn b4 sm" data-back="p">&#8249; Kembali</button><b><img src="/tt.png" alt="">TikTok &middot; Monitor</b></div><div id="pgb_dock_tt"></div>
     <div class="bar"><button class="btn b4" data-resetp="dock:tt">Reset</button><button class="btn b1" data-apply="dock">Terapkan</button></div></div>
   <div class="pane" id="pgoverlay_yt"><div class="pghead"><button class="btn b4 sm" data-back="o">&#8249; Kembali</button><b><img src="/yt.png" alt="">YouTube &middot; Overlay</b></div><div id="pgb_overlay_yt"></div>
     <div class="bar"><button class="btn b4" data-resetp="overlay:yt">Reset</button><button class="btn b1" data-apply="overlay">Terapkan</button></div></div>
   <div class="pane" id="pgoverlay_tt"><div class="pghead"><button class="btn b4 sm" data-back="o">&#8249; Kembali</button><b><img src="/tt.png" alt="">TikTok &middot; Overlay</b></div><div id="pgb_overlay_tt"></div>
     <div class="bar"><button class="btn b4" data-resetp="overlay:tt">Reset</button><button class="btn b1" data-apply="overlay">Terapkan</button></div></div>
-  <div class="pane" id="pgdock_tw"><div class="pghead"><button class="btn b4 sm" data-back="p">&#8249; Kembali</button><b><img src="/tw.png" alt="">Twitch &middot; Pribadi</b></div><div id="pgb_dock_tw"></div>
+  <div class="pane" id="pgdock_tw"><div class="pghead"><button class="btn b4 sm" data-back="p">&#8249; Kembali</button><b><img src="/tw.png" alt="">Twitch &middot; Monitor</b></div><div id="pgb_dock_tw"></div>
     <div class="bar"><button class="btn b4" data-resetp="dock:tw">Reset</button><button class="btn b1" data-apply="dock">Terapkan</button></div></div>
-  <div class="pane" id="pgdock_kk"><div class="pghead"><button class="btn b4 sm" data-back="p">&#8249; Kembali</button><b><img src="/kick.png" alt="">Kick &middot; Pribadi</b></div><div id="pgb_dock_kk"></div>
+  <div class="pane" id="pgdock_kk"><div class="pghead"><button class="btn b4 sm" data-back="p">&#8249; Kembali</button><b><img src="/kick.png" alt="">Kick &middot; Monitor</b></div><div id="pgb_dock_kk"></div>
     <div class="bar"><button class="btn b4" data-resetp="dock:kk">Reset</button><button class="btn b1" data-apply="dock">Terapkan</button></div></div>
   <div class="pane" id="pgoverlay_tw"><div class="pghead"><button class="btn b4 sm" data-back="o">&#8249; Kembali</button><b><img src="/tw.png" alt="">Twitch &middot; Overlay</b></div><div id="pgb_overlay_tw"></div>
     <div class="bar"><button class="btn b4" data-resetp="overlay:tw">Reset</button><button class="btn b1" data-apply="overlay">Terapkan</button></div></div>
@@ -149,6 +149,11 @@
   <div class="row" title="Ukuran acuan fit mengikuti isi halaman (butuh Fit)"><span>Ukuran otomatis</span><input type="checkbox" id="dnmAuto"></div>
   <div class="hint" id="dnmMsg"></div>
   <div class="btns"><button class="btn b2 sm" id="dnmDel" style="margin-right:auto">Hapus</button><button class="btn b4 sm" id="dnmCancel">Batal</button><button class="btn b1 sm" id="dnmSave">Simpan</button></div></div></div>
+<div id="cdModal" class="avm" hidden><div class="avbox"><h3>Atur Chat Dock</h3>
+  <label><span>Posisi tombol Chat Dock</span></label><select id="cdmPos"><option value="top-left">Kiri atas</option><option value="top-center">Tengah atas</option><option value="top-right">Kanan atas</option><option value="bottom-left">Kiri bawah</option><option value="bottom-center">Tengah bawah</option><option value="bottom-right">Kanan bawah</option></select>
+  <div class="row"><span>Sembunyikan dari OBS</span><input type="checkbox" id="cdmProt"></div>
+  <div class="row"><span>Chat bisa di-scroll saat terkunci</span><input type="checkbox" id="cdmScroll"></div>
+  <div class="btns"><button class="btn b4 sm" id="cdmCancel" style="margin-left:auto">Batal</button><button class="btn b1 sm" id="cdmSave">Simpan</button></div></div></div>
 <div id="cfModal" class="avm" hidden><div class="avbox cfbox"><h3>Perubahan belum diterapkan</h3>
   <div class="hint" id="cfSub"></div>
   <div id="cfList"></div>

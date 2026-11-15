@@ -20,10 +20,9 @@ const platDef=dock=>{const o={ytSc:true,ytScBg:'auto',ytScBgC:'#ffca28',ytScBgOp
     list.forEach(([k,,,fc,on])=>{o[pre+k]=on==='b'||(on==='d'&&dock);o[pre+k+'Bg']=true;o[pre+k+'BgC']='#000000';o[pre+k+'BgOp']=60;o[pre+k+'Fc']=fc;});}
   if(dock){o.ttGiftAl=true;o.ttGiftAlSz=100;o.ttGiftAlOrder='bottom';o.ttGiftAlDur=6;o.ttGiftAlMax=3;o.ttJoinMax=1;o.ttLikeTot=true;o.ttLikeHeart=true;o.ttLikeFx='heart';o.ttLikeDens=2;o.ytGiftAl=true;} // v15.3.4: alert Gift (khusus Dock) = pengaturan sendiri di dalam jenis aktivitasnya, terpisah dari tampil di chat. v15.5.5: alert Like DIHAPUS; ttJoinMax = jumlah notif bergabung sekaligus (1-3, bawaan 1)
   return o;};
-const DEF={dock:{...COMMON,...platDef(true),avatar:false,theme:'standar'},overlay:{...COMMON,...platDef(false),anim:'auto',align:'left',fsName:20,fsText:20,bg:0,max:8,fade:45,viewers:false,avatar:true}};
+const DEF={dock:{...COMMON,...platDef(true),avatar:false,max:50},overlay:{...COMMON,...platDef(false),anim:'auto',align:'left',fsName:20,fsText:20,bg:0,max:8,fade:45,viewers:false,avatar:true}};
 const PRE=[['polos','Default']];
 const BUILT=PRE.map(x=>x[0]);
-const THEMES=[['standar','Standar'],['neo','Neumorfisme'],['glass','Glassmorphism'],['clay','Claymorphism'],['liquid','Liquid Glass'],['spatial','Spatial UI']];
 const ANI=[['none','Tanpa animasi'],['slide','Geser'],['fade','Muncul pelan'],['bounce','Memantul'],['zoom','Zoom'],['flip','Putar 3D'],['type','Mengetik'],['glitch','Glitch']];
 const ORD=[['bottom','Dari bawah (chat baru di bawah)'],['top','Dari atas (chat baru di atas)']];
 // platform yang dinyalakan di Koneksi: menentukan header, filter, kirim chat, pengaturan, dan pratinjau
@@ -61,8 +60,7 @@ const UIVARS=['--winbg','--card-bg','--ctl-bg','--ctl-line','--line','--muted','
 function applyUi(s){
   const b=document.body,st=b.style;
   [...b.classList].forEach(c=>{if(c.startsWith('th-'))b.classList.remove(c);});UIVARS.forEach(k=>st.removeProperty(k));
-  const t=s.theme||'standar';
-  if(t!=='standar'&&t!=='kustom')b.classList.add('th-'+t);
+  b.classList.add('th-spatial'); // tema satu-satunya: Spatial UI
 
 }
 // warna chat yang terbaca di atas latar chat pilihan pengguna
@@ -515,9 +513,8 @@ if(isLocked&&!isAdmin){
 // ---- pengaturan ----
 const T=(k,l,o)=>['sel',k,l,o],C=(k,l)=>['chk',k,l],K=(k,l)=>['col',k,l],R=(k,l,a,b,u)=>['sl',k,l,a,b,u||''];
 const FIELDS={
- dock:[['Tema aplikasi',[T('theme','Tampilan aplikasi',THEMES)]],
-  ['Chat',[T('anim','Animasi chat masuk',ANI),T('order','Arah chat muncul',ORD)]],
-  ['Ukuran & jarak',[R('fsName','Ukuran nama',10,48,'px'),R('fsText','Ukuran chat',10,48,'px'),R('gap','Jarak antar chat',0,48,'px'),R('max','Jumlah chat tersimpan (bisa di-scroll)',50,1000)]],
+ dock:[['Chat',[T('anim','Animasi chat masuk',ANI),T('order','Arah chat muncul',ORD)]],
+  ['Ukuran & jarak',[R('fsName','Ukuran nama',10,48,'px'),R('fsText','Ukuran chat',10,48,'px'),R('gap','Jarak antar chat',0,48,'px'),R('max','Jumlah chat tersimpan',50,1000)]],
   ['Latar',[R('bg','Gelap latar jendela',0,100,'%'),C('chatBg','Beri latar di tiap chat'),K('chatBgColor','Warna latar chat'),R('chatBgOp','Transparansi latar chat',0,100,'%')]],
   ['Isi chat',[C('viewers','Tampilkan jumlah penonton'),C('time','Tampilkan jam'),C('botTag','Label BOT pada chat bot'),C('hideBots','Sembunyikan chat bot')]]],
  overlay:[['Gaya',[T('preset','Gaya overlay',PRE),T('align','Posisi chat di overlay',[['left','Kiri'],['right','Kanan']]),T('anim','Animasi chat masuk',[['auto','Otomatis (ikuti gaya)'],...ANI]),T('order','Arah chat muncul',ORD)]],
@@ -639,7 +636,7 @@ document.querySelectorAll('[data-reset]').forEach(b=>b.onclick=()=>{const v=b.da
 let BASE={};
 const GKEYS={p:[['protect','chk','Sembunyikan dari OBS'],['lockScroll','chk','Chat bisa di-scroll saat terkunci'],['ctrlPos','sel','Posisi tombol Chat Dock']],
   o:[['obsW','num','Lebar (px)'],['obsH','num','Tinggi (px)'],['obsPass','pass','Password WebSocket OBS']]};
-const GGRP={p:'Jendela',o:'Sambungkan ke OBS'},SEC_NAME={k:'Koneksi',p:'Pribadi',o:'Overlay',h:'Hotkey'},PP={tt:'TikTok',tw:'Twitch',kk:'Kick',yt:'YouTube'};
+const GGRP={p:'Jendela',o:'Sambungkan ke OBS'},SEC_NAME={k:'Koneksi',p:'Monitor',o:'Overlay',h:'Hotkey'},PP={tt:'TikTok',tw:'Twitch',kk:'Kick',yt:'YouTube'};
 const gval=k=>{const e=$(k);return e?(e.type==='checkbox'?e.checked:e.value):'';};
 function snap(v){BASE[v]=collect(v);BASE.g=BASE.g||{};GKEYS[v==='dock'?'p':'o'].forEach(([k])=>{BASE.g[k]=gval(k);});}
 function snapAll(){snap('dock');snap('overlay');BASE.g.botNames=gval('botNames');BASE.hk={...hk};}
@@ -875,11 +872,24 @@ function dashRender(){const b=$('dst');if(!b)return;const on=PF4.filter(k=>EN[k]
   on.forEach(k=>{const [c,t]=stView(status[k]),g=document.createElement('div'),r=document.createElement('div'),l=document.createElement('span'),i=document.createElement('img'),v=document.createElement('span'),u=document.createElement('div');
     g.className='dsg';r.className='dsr';i.src=PL[k];i.alt='';l.append(i,PNAME[k]);
     v.className='dsv'+(c?' '+c:'');v.textContent=t+(viewers[k]!=null?' \u00b7 '+fmt(viewers[k])+' penonton':'');
-    const un=String(($(UI[k])||{}).value||'').trim();u.className='dsu';u.textContent=un?((c==='ok'?'Tersambung ke ':'Akan tersambung ke ')+un):'Username belum diisi (isi di tab Koneksi)';
+    const un=String(($(UI[k])||{}).value||'').trim();u.className='dsu';u.textContent=un?un:'Username belum diisi (isi di tab Koneksi)';
     r.append(l,v);g.append(r,u);b.appendChild(g);});
   const bar=document.createElement('div'),bt=document.createElement('button');bar.className='dsb';bt.className='btn b1 sm';bt.textContent='Sambungkan';
   bt.onclick=()=>post('/connect',{youtube:$('yt').value,tiktok:$('tk').value,twitch:$('twu').value,kick:$('kku').value,kickRoom:$('kkroom').value}).catch(()=>{});bar.appendChild(bt);b.appendChild(bar);}
 let dashSt={chat:{},docks:{}};
+const SV_GEAR='<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>';
+// pengaturan Chat Dock (dialog di Dashboard): posisi tombol, sembunyikan dari OBS, chat bisa di-scroll saat terkunci. Disimpan langsung (tanpa tombol Terapkan) ke pengaturan global yang sama dengan kotak "Jendela" di tab Monitor.
+function cdOpen(){const g=S.global||{};$('cdmPos').value=g.ctrlPos||'top-right';$('cdmProt').checked=g.protect!==false;$('cdmScroll').checked=g.lockScroll===true;$('cdModal').hidden=false;}
+function initCdModal(){
+  $('cdmCancel').onclick=()=>{$('cdModal').hidden=true;};
+  $('cdModal').onclick=e=>{if(e.target===$('cdModal'))$('cdModal').hidden=true;};
+  $('cdmSave').onclick=async()=>{const v={protect:$('cdmProt').checked,lockScroll:$('cdmScroll').checked,ctrlPos:$('cdmPos').value};
+    try{await post('/settings',{view:'global',values:v});}catch{return;}
+    S.global={...(S.global||{}),...v};
+    $('protect').checked=v.protect;$('lockScroll').checked=v.lockScroll;$('ctrlPos').value=v.ctrlPos; // kotak "Jendela" di tab Monitor ikut sama
+    if(BASE.g){BASE.g.protect=v.protect;BASE.g.lockScroll=v.lockScroll;BASE.g.ctrlPos=v.ctrlPos;}
+    $('cdModal').hidden=true;};
+}
 const SV_RELOAD='<path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>',SV_X='<path d="M6 6l12 12M18 6L6 18"/>',SV_LK_OPEN='<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-1.5"/>',SV_LK_SHUT='<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>';
 // kartu Chat di beranda Dashboard: tombolnya sama seperti kartu Donate Dock (Buka / muat ulang + tutup / gembok)
 function dashChat(){const box=$('dChatBtns'),s2=$('dChatSt');if(!box)return;const c=dashSt.chat||{};
@@ -889,7 +899,8 @@ function dashChat(){const box=$('dChatBtns'),s2=$('dChatSt');if(!box)return;cons
   const mkI=(svg,t,cls,fn)=>{const b=mk('',cls+' ic',fn);b.innerHTML='<svg viewBox="0 0 24 24">'+svg+'</svg>';b.title=t;b.setAttribute('aria-label',t);return b;};
   if(c.open){mkI(SV_RELOAD,'Muat ulang','b4',()=>{post('/win',{which:'main',act:'reload'});});mkI(SV_X,'Tutup','b2',()=>{post('/win',{which:'main',act:'close'});setTimeout(dashPoll,250);});}
   else mk('Buka','b1',()=>{openC('chat');setTimeout(dashPoll,250);});
-  mkI(c.locked?SV_LK_SHUT:SV_LK_OPEN,c.locked?'Lepas pin':'Pin jendela','b4'+(c.locked?' on':''),async()=>{await post('/lock',{on:!c.locked});setTimeout(dashPoll,500);}).disabled=!c.open;}
+  mkI(c.locked?SV_LK_SHUT:SV_LK_OPEN,c.locked?'Lepas pin':'Pin jendela','b4'+(c.locked?' on':''),async()=>{await post('/lock',{on:!c.locked});setTimeout(dashPoll,500);}).disabled=!c.open;
+  mkI(SV_GEAR,'Pengaturan','b3',cdOpen);}
 // Donate Dock di beranda Dashboard: 1 kotak = 1 dock. Pengaturannya (URL, Opacity, bisukan suara) ada di dialog "Atur Donate Dock".
 const DN_MAX=5;
 const dnList=()=>{const g=S.global||{};return Array.isArray(g.donateDocks)?g.donateDocks:[];};
@@ -928,14 +939,14 @@ function initDnModal(){
     if(!dnDelArm){dnDelArm=true;$('dnmDel').textContent='Yakin hapus?';return;}
     await dnPost(dnList().filter(x=>x.id!==dnCur.d.id));};
   $('dDockAdd').onclick=()=>{const L=dnList();if(L.length>=DN_MAX)return;let n=1;while(L.some(x=>x.name==='Browser Dock '+n))n++;
-    dnOpen({id:'d'+Date.now().toString(36),name:'Browser Dock '+n,url:'',opacity:100,dockOp:100,mute:true,fit:true,auto:false,refW:1280,refH:720},true);};
+    dnOpen({id:'d'+Date.now().toString(36),name:'Browser Dock '+n,url:'',opacity:100,dockOp:50,mute:true,fit:true,auto:false,refW:1280,refH:720},true);};
 }
 async function dashPoll(){if(!isDash||document.hidden)return;try{dashSt=await(await fetch('/dash-state')).json();}catch{return;}
   dashChat();dashDocks();}
 let dashInit=false;
 function initDash(){if(dashInit)return;dashInit=true;
   document.querySelectorAll('.sbi[data-t]').forEach(b=>b.onclick=()=>goTab(b.dataset.t));
-  initDnModal();dashPoll();setInterval(()=>{if(!document.hidden)dashPoll();},2500);
+  initDnModal();initCdModal();dashPoll();setInterval(()=>{if(!document.hidden)dashPoll();},2500);
   $('pvm_prev').onclick=pvAddOne;$('pvm_live').onclick=pvSendLive;
   // Dashboard disembunyikan (tray): pratinjau dibongkar supaya tidak memakan RAM/CPU, dimuat lagi saat dibuka
   document.addEventListener('visibilitychange',()=>{pvLoadFrames(document.hidden?'':document.body.dataset.pv);pvAlert(0,true);});

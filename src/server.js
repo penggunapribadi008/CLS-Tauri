@@ -242,8 +242,7 @@ const srv=http.createServer((req,res)=>{
       return res.end(miniHtml[v]);}
     if(indexHtml===null)indexHtml=fs.readFileSync(path.join(__dirname,'index.html'),'utf8'); // v15.4.2: dibaca sekali saja (dulu tiap halaman/jendela membaca ulang ±190 KB dari disk)
     let h=indexHtml;
-    const th=(settings.dock&&settings.dock.theme)||'standar';
-    if(['neo','glass','clay','liquid','spatial'].includes(th)&&v!=='overlay'&&v!=='ctl'&&v!=='galert'&&!u.searchParams.get('locked')&&!u.searchParams.get('preview'))h=h.replace('<body class="dock p-polos">','<body class="dock p-polos th-'+th+'">');
+    if(v!=='overlay'&&v!=='ctl'&&v!=='galert'&&!u.searchParams.get('locked')&&!u.searchParams.get('preview'))h=h.replace('<body class="dock p-polos">','<body class="dock p-polos th-spatial">'); // tema satu-satunya: Spatial UI
     return res.end(h);}
   res.writeHead(404);res.end();
 });

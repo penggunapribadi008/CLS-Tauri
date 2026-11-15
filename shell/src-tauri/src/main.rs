@@ -329,12 +329,12 @@ fn show_dash(app: &AppHandle) {
     }
 }
 
-// Hemat RAM: Dashboard yang disembunyikan ke tray > 30 dtk DIHANCURKAN (bukan sekadar dikosongkan), dibuat lagi saat dibuka.
+// Hemat RAM: Dashboard yang disembunyikan ke tray > 3 dtk DIHANCURKAN (bukan sekadar dikosongkan), dibuat lagi saat dibuka.
 // Kalau tidak ada jendela web lain yang terbuka, semua proses WebView2 ikut berhenti: RAM diam turun ke Rust + node saja.
 fn schedule_suspend(app: &AppHandle) {
     let a = app.clone();
     std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_secs(30));
+        std::thread::sleep(Duration::from_secs(3));
         if let Some(w) = a.get_webview_window("dash") {
             let s = a.state::<Shell>();
             if !w.is_visible().unwrap_or(true) && !s.quitting.load(Ordering::SeqCst) {
@@ -1879,8 +1879,15 @@ fn stop_sidecar(app: &AppHandle) {
     if !has {
         return;
     }
-    send(app, json!({"t":"quit"})); // sidecar menyimpan data dulu
-    std::thread::sleep(Duration::from_millis(400));
+    send(app, json!({"t":"quit"})); // sidecar menyimpan data lalu keluar sendiri (biasanya < 100 ms)
+    // dulu menunggu tetap 400 ms; sekarang berhenti menunggu begitu sidecar sudah keluar, baru dipaksa kalau lewat 400 ms
+    for _ in 0..20 {
+        std::thread::sleep(Duration::from_millis(20));
+        let gone = sh(app).child.lock().map(|g| g.is_none()).unwrap_or(true);
+        if gone {
+            return;
+        }
+    }
     if let Ok(mut g) = sh(app).child.lock() {
         if let Some(c) = g.take() {
             let _ = c.kill();
@@ -1891,6 +1898,10 @@ fn stop_sidecar(app: &AppHandle) {
 fn quit_app(app: &AppHandle) {
     sh(app).quitting.store(true, Ordering::SeqCst);
     save_bounds(app);
+    // sembunyikan semua jendela dulu supaya terasa langsung tertutup; sisa pekerjaan keluar jalan di belakang
+    for (_, w) in app.webview_windows() {
+        let _ = w.hide();
+    }
     stop_sidecar(app);
     app.exit(0);
 }
