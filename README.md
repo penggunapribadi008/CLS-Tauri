@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/banner.svg" alt="ChatStream Labs — semua chat live, satu tempat" width="100%">
+<img src="docs/banner.png" alt="ChatStream Labs — semua chat live, satu tempat" width="100%">
 
 <br>
 
@@ -25,7 +25,7 @@ Semua chat masuk ke satu aliran yang rapi, tampil di atas game, dan siap dipasan
 Chat YouTube, TikTok, Twitch, dan Kick masuk berurutan dalam **satu jendela**. Kunci jendelanya, dan jendela jadi *tembus klik*, jadi game tetap bisa kamu mainkan seolah chat tidak ada.
 
 <div align="center">
-<img src="docs/chat-di-atas-game.png" alt="Jendela chat di atas game" width="92%">
+<img src="docs/chat-di-atas-game.svg" alt="Jendela chat di atas game" width="92%">
 </div>
 
 <br>
@@ -136,8 +136,18 @@ Setiap sesi live tercatat otomatis. Buka **Laporan penonton** untuk melihat graf
 
 > 💡 Mau membalas chat dari aplikasi? Ada fitur **Kirim Chat** lewat ekstensi Chrome (*eksperimental*, bawaannya mati). Nyalakan di Dashboard → Koneksi.
 
+---
+
+## ⚠️ Perlu kamu tahu
+
+- Cara mengambil chat YouTube dan TikTok **tidak resmi** dan bisa berhenti bekerja sewaktu-waktu. Memakainya bisa melanggar ketentuan layanan platform, jadi pakai dengan risiko sendiri.
+- Aplikasi belum bertanda tangan digital, jadi Windows SmartScreen bisa memberi peringatan saat instal. Pilih **Run anyway** kalau kamu percaya sumbernya.
+- Twitch dan Kick masih **eksperimental** dan belum diuji dengan live sungguhan.
+
+---
+
 <div align="center">
 
-Dibuat untuk Streamer khusus nya yang cuma punya 1 monitor aja. 💜
+Dibuat untuk streamer, supaya fokusnya ke konten, bukan ke jendela. 💜
 
 </div>
