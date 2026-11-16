@@ -11,7 +11,6 @@
 **Live di banyak platform tanpa pusing banyak tab.**
 Semua chat masuk ke satu aliran yang rapi, tampil di atas game, dan siap dipasang di OBS.
 
-[🌐 Website](https://penggunapribadi008.github.io/CLS-Tauri/) ·
 [Chat di atas game](#-chat-melayang-di-atas-game) ·
 [Overlay OBS](#-overlay-obs-yang-bikin-channelmu-beda) ·
 [Browser Dock](#-browser-dock-widget-donasi-di-atas-game) ·
